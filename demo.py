@@ -9,7 +9,7 @@ import random
 import numpy as np
 import torch
 
-from task_utils import interpret_dialogue
+from parser import Parser
 
 random.seed(42)
 np.random.seed(42)
@@ -34,6 +34,7 @@ agent_priority = {e:p for e, p in zip(elements_to_divide, priorities)}
 
 # Load manager class according to its priority
 dummy_manager = SomeManagerClass(agent_priority)
+multi_parser = Parser()
 
 # Show the user their priority
 print("Your Priority has been chosen as follows - Firewood : %s, Water : %s, Food : %s" % (human_priority['Firewood'],
