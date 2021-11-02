@@ -39,4 +39,4 @@ def get_intent_label(utterance):
 
     sent = sentiment[0].detach().cpu().numpy()
     pred = sent >= 0.5
-    return ",".join(label_intent[pred])
+    return label_intent[pred]

@@ -1,2 +1,1 @@
-from emotion_extraction import get_emotion_label
-from intent_extraction import get_intent_label
+from inference import get_emotion_label, get_intent_label
