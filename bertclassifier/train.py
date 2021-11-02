@@ -185,7 +185,7 @@ lr = 2e-5
 adam_epsilon = 1e-8
 
 # Number of training epochs (authors recommend between 2 and 4)
-epochs = 1
+epochs = 4
 
 num_warmup_steps = 0
 num_training_steps = len(train_dataloader)*epochs
@@ -221,9 +221,6 @@ for _ in range(1, epochs+1):
         scheduler.step()
         optimizer.zero_grad()
         batch_loss += loss.item()
-
-        if(step==10):
-            break
 
     avg_train_loss = batch_loss / len(train_dataloader)
     print(F'\n\tAverage Training loss: {avg_train_loss}')
