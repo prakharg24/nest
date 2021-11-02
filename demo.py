@@ -9,6 +9,8 @@ import random
 import numpy as np
 import torch
 
+from task_utils import interpret_dialogue
+
 random.seed(42)
 np.random.seed(42)
 torch.manual_seed(42)
@@ -93,7 +95,8 @@ while True:
         food = input("Food : ")
         conv_array.append({'text': user_inp, 'id': 'human', 'task_data': {'Firewood': int(firewood), 'Water': int(water), 'Food': int(food)}})
     elif user_inp == 'Reject-Deal':
+        # Ask for any other input text to reason for rejection
+        additional_inp = input("Human : ")
+        conv_array.append({'text': user_inp + ". " + additional_inp, 'id': 'human', 'task_data': {}})
+    else:
         conv_array.append({'text': user_inp, 'id': 'human', 'task_data': {}})
-
-
-    ### Check again if the negotiation has ended
