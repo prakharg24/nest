@@ -6,14 +6,12 @@ from torch.utils.data import TensorDataset, DataLoader, RandomSampler, Sequentia
 import torch.nn.functional as F
 import transformers
 from transformers import BertTokenizer, BertConfig,AdamW, BertForSequenceClassification,get_linear_schedule_with_warmup
-from transformers import BertForMultipleChoice
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix,classification_report
 from sklearn.metrics import accuracy_score,matthews_corrcoef,f1_score
-from tqdm import tqdm, trange,tnrange,tqdm_notebook
-import random
-import io
+from sklearn.preprocessing import LabelEncoder
+from tqdm import tqdm
 import json
+import sys
 
 def make_anno_dict(anno_arr):
     outdict = {}
@@ -52,6 +50,22 @@ def get_dialogs_from_json(fname):
 
     return X, Y
 
+def get_emotion_sentences(fname):
+    df = pd.read_csv(fname, delimiter=';', header=None, names=['sentence','label'])
+
+    labelencoder = LabelEncoder()
+    df['label_enc'] = labelencoder.fit_transform(df['label'])
+
+    df[['label','label_enc']].drop_duplicates(keep='first')
+
+    df.rename(columns={'label':'label_desc'},inplace=True)
+    df.rename(columns={'label_enc':'label'},inplace=True)
+
+    sentences = df.sentence.values
+    labels = df.label.values
+
+    return sentences, labels
+
 class BERTMultiLabel(torch.nn.Module):
     def __init__(self, num_labels):
         super(BERTMultiLabel, self).__init__()
@@ -68,16 +82,70 @@ class BERTMultiLabel(torch.nn.Module):
 def loss_fn(outputs, targets):
     return torch.nn.BCEWithLogitsLoss()(outputs, targets)
 
+
+def eval_multilabel(model, validation_dataloader):
+    fin_targets=[]
+    fin_outputs=[]
+    for batch in validation_dataloader:
+        batch = tuple(t.to(device) for t in batch)
+        b_input_ids, b_input_mask, b_labels = batch
+        with torch.no_grad():
+            outputs = model(b_input_ids, b_input_mask, None)
+
+        fin_targets.extend(b_labels.cpu().detach().numpy().tolist())
+        fin_outputs.extend(torch.sigmoid(outputs).cpu().detach().numpy().tolist())
+
+    fin_outputs = np.array(fin_outputs) >= 0.5
+    accuracy = accuracy_score(fin_targets, fin_outputs)
+    f1_score_micro = f1_score(fin_targets, fin_outputs, average='micro')
+    f1_score_macro = f1_score(fin_targets, fin_outputs, average='macro')
+    print(f"Accuracy Score = {accuracy}")
+    print(f"F1 Score (Micro) = {f1_score_micro}")
+    print(f"F1 Score (Macro) = {f1_score_macro}")
+
+
+def eval_multiclass(model, validation_dataloader):
+    eval_accuracy,eval_mcc_accuracy,nb_eval_steps = 0, 0, 0
+
+    for batch in validation_dataloader:
+        batch = tuple(t.to(device) for t in batch)
+        b_input_ids, b_input_mask, b_labels = batch
+        with torch.no_grad():
+            logits = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask)
+
+        logits = logits[0].to('cpu').numpy()
+        label_ids = b_labels.to('cpu').numpy()
+        pred_flat = np.argmax(logits, axis=1).flatten()
+        labels_flat = label_ids.flatten()
+
+        tmp_eval_accuracy = accuracy_score(labels_flat,pred_flat)
+        tmp_eval_mcc_accuracy = matthews_corrcoef(labels_flat, pred_flat)
+        eval_accuracy += tmp_eval_accuracy
+        eval_mcc_accuracy += tmp_eval_mcc_accuracy
+        nb_eval_steps += 1
+
+    print(F'\n\tValidation Accuracy: {eval_accuracy/nb_eval_steps}')
+    print(F'\n\tValidation MCC Accuracy: {eval_mcc_accuracy/nb_eval_steps}')
+
+#######################################
+### Code Starts Here
+#######################################
+dataset = sys.argv[1]
+
 # identify and specify the GPU as the device, later in training loop we will load data into device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-sentences, labels = get_dialogs_from_json('data/casino.json')
+if dataset == 'casino':
+    sentences, labels = get_dialogs_from_json('data/casino/casino.json')
+elif dataset == 'emotion':
+    sentences, labels = get_emotion_sentences('data/emotion/emotion.txt')
+else:
+    raise ValueError('Dataset not defined')
 
 MAX_LEN = 256
 
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased',do_lower_case=True)
 input_ids = [tokenizer.encode(sent,add_special_tokens=True,max_length=MAX_LEN,truncation=True,padding='max_length') for sent in sentences]
-labels = labels
 
 attention_masks = []
 attention_masks = [[float(i>0) for i in seq] for seq in input_ids]
@@ -107,8 +175,10 @@ validation_sampler = RandomSampler(validation_data)
 validation_dataloader = DataLoader(validation_data,sampler=validation_sampler,batch_size=batch_size)
 
 # Load BertForSequenceClassification, the pretrained BERT model with a single linear classification layer on top.
-# model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=10).to(device)
-model = BERTMultiLabel(num_labels=10).to(device)
+if dataset == 'casino':
+    model = BERTMultiLabel(num_labels=10).to(device)
+elif dataset == 'emotion':
+    model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=6).to(device)
 
 # Parameters:
 lr = 2e-5
@@ -137,8 +207,13 @@ for _ in range(1, epochs+1):
 
         batch = tuple(t.to(device) for t in batch)
         b_input_ids, b_input_mask, b_labels = batch
-        outputs = model(b_input_ids, b_input_mask, None)
-        loss = loss_fn(outputs, b_labels.float())
+
+        if dataset=='casino':
+            outputs = model(b_input_ids, b_input_mask, None)
+            loss = loss_fn(outputs, b_labels.float())
+        elif dataset=='emotion':
+            outputs = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask, labels=b_labels)
+            loss = outputs[0]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
@@ -147,35 +222,21 @@ for _ in range(1, epochs+1):
         optimizer.zero_grad()
         batch_loss += loss.item()
 
+        if(step==10):
+            break
+
     avg_train_loss = batch_loss / len(train_dataloader)
     print(F'\n\tAverage Training loss: {avg_train_loss}')
 
     model.eval()
 
-    fin_targets=[]
-    fin_outputs=[]
-    for batch in validation_dataloader:
-        batch = tuple(t.to(device) for t in batch)
-        b_input_ids, b_input_mask, b_labels = batch
-        with torch.no_grad():
-            outputs = model(b_input_ids, b_input_mask, None)
+    if dataset=='casino':
+        eval_multilabel(model, validation_dataloader)
+    elif dataset=='emotion':
+        eval_multiclass(model, validation_dataloader)
 
-        fin_targets.extend(b_labels.cpu().detach().numpy().tolist())
-        fin_outputs.extend(torch.sigmoid(outputs).cpu().detach().numpy().tolist())
-
-    fin_outputs = np.array(fin_outputs) >= 0.5
-    accuracy = metrics.accuracy_score(fin_targets, fin_outputs)
-    f1_score_micro = metrics.f1_score(fin_targets, fin_outputs, average='micro')
-    f1_score_macro = metrics.f1_score(fin_targets, fin_outputs, average='macro')
-    print(f"Accuracy Score = {accuracy}")
-    print(f"F1 Score (Micro) = {f1_score_micro}")
-    print(f"F1 Score (Macro) = {f1_score_macro}")
-
-model_save_folder = 'model_intent/'
-tokenizer_save_folder = 'tokenizer_intent/'
-
-os.makedirs(model_save_folder, exist_ok=True)
-os.makedirs(tokenizer_save_folder, exist_ok=True)
-
-model.save_pretrained(model_save_folder)
-tokenizer.save_pretrained(tokenizer_save_folder)
+if dataset=='casino':
+    model_save_path = 'models/intent_classifier.pt'
+elif dataset=='emotion':
+    model_save_path = 'models/emotion_classifier.pt'
+torch.save(model, model_save_path)
