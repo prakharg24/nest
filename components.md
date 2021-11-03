@@ -4,7 +4,7 @@ Stored in the folder `bertclassifier`. Defined in the file `parser.py`.
 
 ### Downloads Required
 
-The data files for both casino and emotion dataset are already present in the repo, if the training needs to be repeated. The trained model files can be download from [coming soon]. After downloading the model files, place them in the folder as `bertclassifier/models/emotion_classifier.pt` and `bertclassifier/models/intent_classifier.pt`.
+The data files for both casino and emotion dataset are already present in the repo, if the training needs to be repeated. The trained model files can be download from the shared onedrive folder. After downloading the model files, place them in the folder as `bertclassifier/models/emotion_classifier.pt` and `bertclassifier/models/intent_classifier.pt`.
 
 ### Installation Required
 

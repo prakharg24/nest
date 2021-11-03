@@ -8,13 +8,16 @@
 import random
 import numpy as np
 import torch
+import transformers
+
+## Uncomment this for the final demo to suppress unnecessary warnings
+# transformers.logging.set_verbosity(40)
 
 from parser import Parser
 
 random.seed(42)
 np.random.seed(42)
 torch.manual_seed(42)
-torch.use_deterministic_algorithms(True)
 
 ### Initialize all hyperparameters and class objects as required
 ttl_firewood = 3
@@ -33,7 +36,7 @@ agent_priority = {e:p for e, p in zip(elements_to_divide, priorities)}
 
 
 # Load manager class according to its priority
-dummy_manager = SomeManagerClass(agent_priority)
+# dummy_manager = SomeManagerClass(agent_priority)
 multi_parser = Parser()
 
 # Show the user their priority
@@ -55,6 +58,7 @@ meta_data_seq = []
 while True:
     ### Call the parser (or multiple different parsers as required) to extract relevant meta-data
     meta_data = multi_parser.parse(conv_array[-1]['text'])
+    print(meta_data)
     meta_data_seq.append(meta_data)
 
     ### Call the agent with the new set of metadata
