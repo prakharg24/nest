@@ -6,6 +6,9 @@ class Parser():
 
     def parse(utterance):
         emotion_label = get_emotion_labeln(utterance)
+        print(emotion_label)
         intent_label = get_intent_label(utterance)
+        print(intent_label)
+        exit()
 
         return emotion_label, intent_label

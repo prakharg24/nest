@@ -54,7 +54,7 @@ print("Human : %s" % conv_array[0]['text'])
 meta_data_seq = []
 while True:
     ### Call the parser (or multiple different parsers as required) to extract relevant meta-data
-    meta_data = dummy_parser(conv_array[-1]['text'])
+    meta_data = multi_parser.parse(conv_array[-1]['text'])
     meta_data_seq.append(meta_data)
 
     ### Call the agent with the new set of metadata
