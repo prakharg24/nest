@@ -1,1 +1,5 @@
 *.pt
+*.pyc
+
+bertclassifier/models/
+ppcm/models/dialoGPT/
