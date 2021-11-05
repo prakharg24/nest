@@ -104,7 +104,7 @@ def load_dataset(idx2class, pretrained_model, train_iterator, test_iterator, cac
     train_dataset = Dataset(x, y)
 
     test_x, test_y = [], []
-    for ele in test_iterator:
+    for ele in tqdm(test_iterator):
         if detokenize:
             ele["text"] = TreebankWordDetokenizer().detokenize(ele["text"])
         seq = discriminator.tokenizer.encode(ele["text"])
@@ -156,7 +156,7 @@ def evaluate_performance(args,data_loader, discriminator, cached=False):
 
     test_loss /= len(data_loader.dataset)
     accuracy = correct / len(data_loader.dataset)
-    F1 = f1_score(sum(target_list,[]), sum(predicted_list,[]), average='micro')
+    F1 = f1_score(sum(target_list,[]), sum(predicted_list,[]), average='macro')
 
 
     return test_loss, accuracy, F1
@@ -207,6 +207,9 @@ def train_discriminator(
             train_subtrees=True,
         )
 
+        def emotion_to_dict(input_ele):
+            return {"text": input_ele[0], "label": input_ele[1]}
+
         train_iterator = map(vars, train_data)
         test_iterator = map(vars, test_data)
 
@@ -219,7 +222,7 @@ def train_discriminator(
         idx2class = ["anger", "fear", "joy", "love", "sadness", "surprise"]
 
         df_train = pd.read_csv('data/emotion/train.txt', delimiter=';', header=None)
-        df_test = pd.read_csv('data/emotion/val.txt', delimiter=';', header=None)
+        df_test = pd.read_csv('data/emotion/test.txt', delimiter=';', header=None)
         train_np = np.array(df_train)
         test_np = np.array(df_test)
 
@@ -267,11 +270,8 @@ def train_discriminator(
 
     optimizer = optim.Adam(discriminator.parameters(), lr=0.0001)
 
-    loss_per_epoch = []
     accuracy_per_epoch = []
     F1_per_epoch = []
-
-    loss_per_epoch_train = []
     accuracy_per_epoch_train = []
     F1_per_epoch_train = []
 
@@ -293,7 +293,6 @@ def train_discriminator(
             data_loader=train_loader,
             discriminator=discriminator, cached=cached
         )
-        loss_per_epoch_train.append(loss_train)
         accuracy_per_epoch_train.append(accuracy_train)
         F1_per_epoch_train.append(f1_train)
 
@@ -302,7 +301,6 @@ def train_discriminator(
             data_loader=test_loader,
             discriminator=discriminator, cached=cached
         )
-        loss_per_epoch.append(loss)
         accuracy_per_epoch.append(accuracy)
         F1_per_epoch.append(f1)
 
@@ -313,14 +311,12 @@ def train_discriminator(
         print()
         # print("\nExample prediction")
 
-        if save_model:
+        if save_model and accuracy >= max(accuracy_per_epoch):
+            print("New Best Achieved. Model Saved")
             torch.save(discriminator.get_classifier().state_dict(),
-                       "models/discriminators/DIALOGPT_{}_classifier_head_epoch_{}.pt".format(dataset,
+                       "models/discriminators/DIALOGPT_{}_classifier_head_best.pt".format(dataset,
                                                                epoch + 1))
     print()
-    epoch_min_loss = loss_per_epoch.index(min(loss_per_epoch))
-    print(f"TRAIN Minimum loss {epoch_min_loss + 1} ACC:{accuracy_per_epoch_train[epoch_min_loss]} F1:{F1_per_epoch_train[epoch_min_loss]}" )
-    print(f"TEST Minimum loss {epoch_min_loss + 1} ACC:{accuracy_per_epoch[epoch_min_loss]} F1:{F1_per_epoch[epoch_min_loss]}" )
 
     epoch_max_accuracy = accuracy_per_epoch.index(max(accuracy_per_epoch))
     print("Maximum accuracy on test set obtained at epoch", epoch_max_accuracy + 1)

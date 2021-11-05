@@ -74,6 +74,11 @@ python train.py casino
 
 ## Dialogue Generator
 
+Discriminator for Emotion --
+Maximum accuracy on test set obtained at epoch 98
+TRAIN Minimum loss 98 ACC:0.731 F1:0.6658824593455571
+TEST Minimum loss 98 ACC:0.706 F1:0.6141978659861386
+
 ### Downloads Required
 
 ### Installation Required
