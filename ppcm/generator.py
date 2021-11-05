@@ -117,6 +117,10 @@ if __name__ == '__main__':
     parser.add_argument('--model_size', type=str, default="medium", help='Size of dialoGPT')
     parser.add_argument('--model_path', '-M', type=str, default='gpt-2_pt_models/dialoGPT/',
                         help='pretrained model name or path to local checkpoint')
+    parser.add_argument('--discrim', '-D', type=str, default=None,
+                        choices=('sentiment',"daily_dialogue_act",
+                                 "AG_NEWS"),
+                        help='Discriminator to use for loss-type 2')
     parser.add_argument('--label_class', type=int, default=-1, help='Class label used for the discriminator')
     parser.add_argument('--stepsize', type=float, default=0.02)
     parser.add_argument('--num_iterations', type=int, default=0)
@@ -132,6 +136,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_samples', type=int, default=1,
                         help='Number of samples to generate from the modified latents')
     parser.add_argument('--horizon_length', type=int, default=1, help='Length of future to optimize over')
+    parser.add_argument('--window_length', type=int, default=0,
+                        help='Length of past which is being optimizer; 0 corresponds to infinite window length')
     # parser.add_argument('--force-token', action='store_true', help='no cuda')
     parser.add_argument('--decay', action='store_true', help='whether to decay or not')
     parser.add_argument('--gamma', type=float, default=1.0)
@@ -157,7 +163,6 @@ if __name__ == '__main__':
         from models.pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Config
 
     device = 'cpu' if args.nocuda else 'cuda'
-    args.discrim = 'sentiment'
     args.model_path = f'models/dialoGPT/{args.model_size}/'
     config = GPT2Config.from_json_file(os.path.join(args.model_path, 'config.json'))
     tokenizer = GPT2Tokenizer.from_pretrained(args.model_path)

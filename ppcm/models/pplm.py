@@ -43,8 +43,8 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
     # Generate inital perturbed past
     past_perturb_orig = [(np.random.uniform(0.0, 0.0, p.shape).astype('float32'))
                          for p in past]
-    
-    
+
+
     if accumulated_hidden is None:
         accumulated_hidden = 0
 
@@ -121,14 +121,14 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
             discrim_loss = ce_loss(predicted_sentiment, label)
             loss += discrim_loss
 
-            ## LOGGING 
+            ## LOGGING
             ce_loss_logging = torch.nn.CrossEntropyLoss(reduction='none')
             loss_logging = ce_loss_logging(predicted_sentiment, label).detach().tolist()
             loss_per_iter.append(loss_logging)
 
         if args.loss_type == 4: # Enteiltment loss
             _ = model(torch.tensor([knowledge_to_ent], device='cuda', dtype=torch.long))
-            hidden_p = model.hidden_states.repeat(batch_size,1,1) #torch.mean(model.hidden_states,dim=1).repeat(batch_size,1) 
+            hidden_p = model.hidden_states.repeat(batch_size,1,1) #torch.mean(model.hidden_states,dim=1).repeat(batch_size,1)
 
             ce_loss = torch.nn.CrossEntropyLoss(reduction='sum')
             new_true_past = true_past
@@ -141,7 +141,7 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
                 future_hidden = model.hidden_states  # Get expected hidden states
                 new_accumulated_hidden = new_accumulated_hidden + torch.sum(future_hidden, dim=1)
 
-            if current_output.size(1)!=0: 
+            if current_output.size(1)!=0:
                 hidden_h = torch.cat((current_output,future_hidden), dim=1)
             else:
                 hidden_h = future_hidden
@@ -152,7 +152,7 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
             discrim_loss = ce_loss(predicted_NLI, label)
             loss += discrim_loss
 
-            ## LOGGING 
+            ## LOGGING
             ce_loss_logging = torch.nn.CrossEntropyLoss(reduction='none')
             loss_per_iter.append(ce_loss_logging(predicted_NLI, label).detach().tolist())
 
@@ -174,7 +174,7 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
             discrim_loss = bce_loss(predicted_sentiment, label.unsqueeze(-1))
             loss += discrim_loss
 
-            ## LOGGING 
+            ## LOGGING
             bce_loss_logging = torch.nn.BCEWithLogitsLoss(reduction='none')
             loss_per_iter.append(bce_loss_logging(predicted_sentiment, label.unsqueeze(-1)).detach().tolist())
 
@@ -185,11 +185,11 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
             correction = SmallConst * (probabs <= SmallConst).type(torch.FloatTensor).cuda().detach()
             corrected_probabs = probabs + correction.detach()
             kl_loss = kl_scale * ((corrected_probabs * (corrected_probabs / p).log()).sum())
-         
+
             ## TODO
             # print(' kl_loss', (kl_loss).data.cpu().numpy())
             loss += kl_loss  # + discrim_loss
-        
+
         ## TODO
         # print(f'pplm_loss {current_iter}', ((loss/batch_size) - kl_loss).data.cpu().numpy())
         # print(f'pplm_min_loss {current_iter}', min(loss_logging))
@@ -197,8 +197,8 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
 
         loss.backward(retain_graph=True)
         if grad_norms is not None and args.loss_type == 1:
-            grad_norms = [torch.max(grad_norms[index], 
-                torch.norm_except_dim(p_.grad * window_mask, dim=1)) 
+            grad_norms = [torch.max(grad_norms[index],
+                torch.norm_except_dim(p_.grad * window_mask, dim=1))
                     for index, p_ in enumerate(past_perturb)]
         else:
             grad_norms = [(torch.norm_except_dim(p_.grad * window_mask, dim=1) + SmallConst) for index, p_ in enumerate(past_perturb)]
@@ -260,24 +260,8 @@ def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',re
 
     good_index = []
     actual_words = None
-    if args.bag_of_words:
-        bags_of_words = args.bag_of_words.split(";")
-        for wordlist in bags_of_words:
-            with open(wordlist, "r") as f:
-                words = f.read().strip()
-                words = words.split('\n')
-            good_index.append(list_tokens(words,enc))
-            
-        # useless for the process
-        for good_list in good_index:
-            good_list = list(filter(lambda x: len(x) <= 1, good_list))
-            actual_words = [(enc.decode(ww).strip(),ww) for ww in good_list]
     knowledge_to_ent = None
-    if args.bag_of_words and classifier:
-        args.loss_type = 3
-    elif args.bag_of_words:
-        args.loss_type = 1
-    elif 'NLI' in args.discrim:
+    if 'NLI' in args.discrim:
         knowledge_to_ent = enc.encode(knowledge)
         args.loss_type = 4
     elif args.BCE and classifier is not None:
@@ -308,7 +292,7 @@ def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',re
                                                         knowledge_to_ent=knowledge_to_ent)
     t1 = time.time()
     print("time",t1-t0)
-    torch.cuda.empty_cache()        
+    torch.cuda.empty_cache()
     return original, perturbed, None, loss_in_time, actual_words
 
 
@@ -358,7 +342,7 @@ def sample_from_hidden(model, args, classifier, context=None, past=None, device=
                                                                         accumulated_hidden=accumulated_hidden,
                                                                         current_output=true_hidden[:,len_prefix-i:,:],
                                                                         classifier=classifier,
-                                                                        grad_norms=grad_norms, 
+                                                                        grad_norms=grad_norms,
                                                                         knowledge_to_ent=knowledge_to_ent)
             loss_in_time.append(loss_per_iter)
 
