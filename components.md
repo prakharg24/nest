@@ -55,11 +55,47 @@ F1 Score (Macro) : 0.528857752869762
 
 ### Train and Test Model
 
-The training/testing code is combined together in `bertclassifier/train.py` for both the classifiiers and can be run as follows,
+The training/testing code is combined together in `bertclassifier/train.py` for both the classifiers and can be run as follows,
 
 ```
 python train.py emotion
 python train.py casino
+```
+
+## PPCM Discriminator
+
+Stored in the folder `ppcm`. Defined in the file `ppcm/discriminator.py`.
+
+### Downloads Required
+
+All the data files are either already present in the repo, or will be automatically downloaded when running the code. Before running any training/testing, the pretrained GPT2 model needs to downloaded from [here](https://drive.google.com/file/d/1V8juN486jpeqPhKrGeuJ8WcpaCAy4D3-/view). Unzip the downloaded files and move it inside the folder `models/`, such that there are three folders formed for pre-trained models, i.e. `models/dialoGPT/small/`, `models/dialoGPT/medium/`, `models/dialoGPT/large/`. For now, we are only using `models/dialoGPT/medium/`, but download all just in case we switch to something else in the future.
+
+### Installation Required
+
+Major libraries required are `torch` and `transformers`. No other unique library required.
+
+### Meta-Data
+
+For emotion classification, the accuracy achieved on testing/validation dataset was as follows,
+
+```
+Validation Accuracy : 0.706
+Validation F1 Score : 0.6141978659861386
+```
+
+For intent classification, the accuracy achieved on testing/validation dataset was as follows,
+
+```
+coming soon
+```
+
+### Train and Test Model
+
+The training/testing code for discriminator is present in `ppcm/discriminator.py` for all datasets and can be run as follows,
+
+```
+python discriminator.py --save_model --cached --epochs 100 --dataset emotion
+python discriminator.py --save_model --cached --epochs 100 --dataset sentiment
 ```
 
 ## Seq2Seq Model for Baseline Negotiation Agent
@@ -73,11 +109,6 @@ python train.py casino
 ### Train and Test Model
 
 ## Dialogue Generator
-
-Discriminator for Emotion --
-Maximum accuracy on test set obtained at epoch 98
-TRAIN Minimum loss 98 ACC:0.731 F1:0.6658824593455571
-TEST Minimum loss 98 ACC:0.706 F1:0.6141978659861386
 
 ### Downloads Required
 
