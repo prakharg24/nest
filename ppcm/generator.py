@@ -18,6 +18,10 @@ from utils.helper import load_classifier, load_model, cut_seq_to_eos, parse_pref
 from utils.helper import EOS_ID, find_ngrams, dist_score, truncate, pad_sequences, print_loss_matplotlib
 from utils.utils_sample import scorer
 
+torch.manual_seed(0)
+torch.cuda.manual_seed(0)
+np.random.seed(0)
+
 def make_header(args,id_starter,knowledge):
     str_title = ""
     str_title += "===================================================\n"
@@ -168,9 +172,8 @@ if __name__ == '__main__':
     parser.add_argument("--BCE", type=bool, default=False)
     parser.add_argument("--bag_of_words", type=str, default=None)
     args = parser.parse_args()
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    np.random.seed(args.seed)
+
+
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     if(args.load_check_point_adapter != "None"):

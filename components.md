@@ -86,7 +86,8 @@ Validation F1 Score : 0.6141978659861386
 For intent classification, the accuracy achieved on testing/validation dataset was as follows,
 
 ```
-coming soon
+Validation Accuracy : 0.4796380090497738
+Validation F1 Score : 0.4585935664642188
 ```
 
 ### Train and Test Model
