@@ -11,6 +11,21 @@ model.eval()
 
 def get_ppl(text, starter):
     lls = []
+    starter.append(" ")
+    for idx, t in enumerate(text):
+        input_ids = torch.tensor(tokenizer.encode(" ".join(starter) + t)).unsqueeze(0)  # Batch size 1
+        starter.append(t)
+        input_ids = input_ids.to('cuda')
+        if input_ids.size(1)>1:
+            with torch.no_grad():
+                outputs = model(input_ids, labels=input_ids)
+            loss, _ = outputs[:2]
+            lls.append(loss.item())
+
+    return math.exp(np.mean(lls))
+
+def get_ppl_old(text, starter):
+    lls = []
     for idx, t in enumerate(text):
         input_ids = torch.tensor(tokenizer.encode(" ".join(starter[idx]['conversation'])+ " "+t)).unsqueeze(0)  # Batch size 1
         input_ids = input_ids.to('cuda')
@@ -19,7 +34,7 @@ def get_ppl(text, starter):
                 outputs = model(input_ids, labels=input_ids)
             loss, _ = outputs[:2]
             lls.append(loss.item())
-    
+
     return math.exp(np.mean(lls))
 
 def get_ppl_simplified(text, starter):
@@ -32,5 +47,5 @@ def get_ppl_simplified(text, starter):
                 outputs = model(input_ids, labels=input_ids)
             loss, _ = outputs[:2]
             lls.append(loss.item())
-    
+
     return math.exp(np.mean(lls))
