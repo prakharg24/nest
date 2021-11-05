@@ -27,7 +27,7 @@ def load_classifier(args,model):
                      "neutral"]
         class2idx = {c: i for i, c in enumerate(idx2class)}
         classes_num = len(idx2class)
-        models_weight = "models/discriminators/DIALOGPT_sentiment_classifier_head_epoch_10.pt"
+        models_weight = "models/discriminators/DIALOGPT_sentiment_classifier_head_best.pt"
 
         classifier = Discriminator(
             class_size=classes_num,
@@ -65,7 +65,7 @@ def load_classifier(args,model):
         classifier.eval()
 
 
-  
+
 
     class2idx = {i: c for i, c in enumerate(idx2class)}
     return classifier, class2idx
@@ -115,7 +115,7 @@ def load_model_recursive(model, checkpoint, args, verbose=False):
                     for s in model_state_dict.keys())):
             print('Loading transfomer only')
             start_model = model.transformer
-        
+
 
         missing_keys = []
         unexpected_keys = []
@@ -195,7 +195,7 @@ def find_ngrams(input_list, n):
 def dist_score(s,enc):
     if(len(enc.encode(s))>0): return find_ngrams(enc.encode(s), n=2)/len(enc.encode(s))
     else: return 0
-    
+
 def truncate(f, n):
     if math.isnan(f):
         return f
@@ -259,9 +259,9 @@ def parse_prefixes(args, tokenizer=None, entailment=False, seed=1234, task='data
                             _, text_turn = d.split("Human 2: ")
                             conversation.append({"turn":i,"speaker":"Human 2","text":text_turn.strip('\n').strip()})
                         i += 1
-        
+
         random.seed(seed)
-        if(args.all_starter): 
+        if(args.all_starter):
             conversation = data
             for i_c,conv in enumerate(conversation):
                 for index in range(len(conv)-2):
@@ -303,5 +303,5 @@ def make_logdir(args):
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     # logdir = os.path.join('runs', current_time + '_' + socket.gethostname() + '_' + model_name)
     logdir = os.path.join('runs', f'{args.dataset}_{args.label}_{current_time}') #  current_time + '_' + socket.gethostname() + '_' + model_name)
-    
+
     return logdir
