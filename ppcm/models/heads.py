@@ -68,66 +68,68 @@ class Discriminator(torch.nn.Module):
         logits = self.classifier_head(avg_hidden)
         return logits
 
-class DiscriminatorAll(torch.nn.Module):
-    """Transformer encoder followed by a Classification Head for multiple datasets"""
-
-    def __init__(
-            self,
-            class_size,
-            pretrained_model="medium",
-            cached_mode=False,
-            load_weight=None,
-            model_pretrained=None,
-            device='cuda'
-    ):
-        super(Discriminator, self).__init__()
-
-        model_path = f'models/dialoGPT/{pretrained_model}/'
-        config = GPT2Config.from_json_file(os.path.join(model_path, 'config.json'))
-        self.tokenizer = GPT2Tokenizer.from_pretrained(model_path)
-        if model_pretrained != None:
-            self.encoder = model_pretrained
-        else:
-            self.encoder = load_model(GPT2LMHeadModel(config), model_path+f"{pretrained_model}_ft.pkl", None, verbose=True)
-        self.embed_size = config.n_embd
-
-        self.classifier_head = ClassificationHead(
-            class_size=class_size,
-            embed_size=self.embed_size
-        )
-        self.cached_mode = cached_mode
-        if(load_weight != None):
-            self.classifier_head.load_state_dict(torch.load(load_weight))
-        self.device = device
-        self.class_size = class_size
-
-    def get_classifier(self):
-        return self.classifier_head
-
-    def train_custom(self):
-        for param in self.encoder.parameters():
-            param.requires_grad = False
-        self.classifier_head.train()
-
-    def avg_representation(self, x):
-        mask = x.ne(0).unsqueeze(2).repeat(
-            1, 1, self.embed_size
-        ).float().to(self.device).detach()
-        hidden, _ = self.encoder.transformer(x)
-        masked_hidden = hidden * mask
-        avg_hidden = torch.sum(masked_hidden, dim=1) / (
-                torch.sum(mask, dim=1).detach() + EPSILON
-        )
-        return avg_hidden
-
-    def forward(self, x):
-        if self.cached_mode:
-            avg_hidden = x.to(self.device)
-        else:
-            avg_hidden = self.avg_representation(x.to(self.device))
-
-        logits = self.classifier_head(avg_hidden)
-        return logits
+# class DiscriminatorAllInference(torch.nn.Module):
+#     """Transformer encoder followed by a Classification Head for multiple datasets"""
+#
+#     def __init__(
+#             self,
+#             sent_class_size, emot_class_size, intn_class_size,
+#             pretrained_model="medium",
+#             sent_load_weight=None, emot_load_weight=None, intn_load_weight=None,
+#             device='cuda'
+#     ):
+#         super(DiscriminatorAll, self).__init__()
+#
+#         model_path = f'models/dialoGPT/{pretrained_model}/'
+#         config = GPT2Config.from_json_file(os.path.join(model_path, 'config.json'))
+#         self.tokenizer = GPT2Tokenizer.from_pretrained(model_path)
+#         self.encoder = load_model(GPT2LMHeadModel(config), model_path+f"{pretrained_model}_ft.pkl", None, verbose=True)
+#         self.embed_size = config.n_embd
+#
+#         self.sent_classifier_head = ClassificationHead(
+#             class_size=sent_class_size,
+#             embed_size=self.embed_size
+#         )
+#         if(sent_load_weight != None):
+#             self.sent_classifier_head.load_state_dict(torch.load(sent_load_weight))
+#
+#         self.emot_classifier_head = ClassificationHead(
+#             class_size=emot_class_size,
+#             embed_size=self.embed_size
+#         )
+#         if(emot_load_weight != None):
+#             self.emot_classifier_head.load_state_dict(torch.load(emot_load_weight))
+#
+#         self.intn_classifier_head = ClassificationHead(
+#             class_size=intn_class_size,
+#             embed_size=self.embed_size
+#         )
+#         if(intn_load_weight != None):
+#             self.intn_classifier_head.load_state_dict(torch.load(intn_load_weight))
+#
+#         self.cached_mode = cached_mode
+#         self.device = device
+#         self.class_size = class_size
+#
+#     def avg_representation(self, x):
+#         mask = x.ne(0).unsqueeze(2).repeat(
+#             1, 1, self.embed_size
+#         ).float().to(self.device).detach()
+#         hidden, _ = self.encoder.transformer(x)
+#         masked_hidden = hidden * mask
+#         avg_hidden = torch.sum(masked_hidden, dim=1) / (
+#                 torch.sum(mask, dim=1).detach() + EPSILON
+#         )
+#         return avg_hidden
+#
+#     def forward(self, x):
+#         if self.cached_mode:
+#             avg_hidden = x.to(self.device)
+#         else:
+#             avg_hidden = self.avg_representation(x.to(self.device))
+#
+#         logits = self.classifier_head(avg_hidden)
+#         return logits
 
 
 class Scorer(torch.nn.Module):

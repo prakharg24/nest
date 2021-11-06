@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-from models.heads import Discriminator, DiscriminatorAll
+from models.heads import Discriminator
 
 device = "cuda"
 

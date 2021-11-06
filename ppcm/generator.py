@@ -118,8 +118,6 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', '-M', type=str, default='gpt-2_pt_models/dialoGPT/',
                         help='pretrained model name or path to local checkpoint')
     parser.add_argument('--discrim', '-D', type=str, default=None,
-                        choices=('sentiment',"daily_dialogue_act",
-                                 "AG_NEWS"),
                         help='Discriminator to use for loss-type 2')
     parser.add_argument('--label_class', type=int, default=-1, help='Class label used for the discriminator')
     parser.add_argument('--stepsize', type=float, default=0.02)
