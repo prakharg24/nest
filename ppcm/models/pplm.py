@@ -14,6 +14,7 @@ from torch.autograd import Variable
 import numpy as np
 from IPython import embed
 import pdb
+import random
 from operator import add
 import pickle
 import csv
@@ -25,7 +26,7 @@ from utils.helper import EOS_ID
 
 SmallConst = 1e-15
 
-def perturb_past(past, model, prev, args, classifier, stepsize=0.01, vocab_size=50257,
+def perturb_past(past, model, prev, args, classifier_arr, multilabel_arr, label_arr, stepsize=0.01, vocab_size=50257,
                  original_probs=None, accumulated_hidden=None, current_output=None, true_past=None, grad_norms=None):
     window_length = args.window_length
     gm_scale, kl_scale = args.gm_scale, args.kl_scale
@@ -81,51 +82,32 @@ def perturb_past(past, model, prev, args, classifier, stepsize=0.01, vocab_size=
         probabs = F.softmax(logits, dim=-1)
         loss = 0.0
 
-        ## DISCRIMINATOR
-        if args.loss_type == 2 or args.loss_type == 3:
-            ce_loss = torch.nn.CrossEntropyLoss(reduction='sum')
-            new_true_past = true_past
-            for i in range(args.horizon_length):
+        new_true_past = true_past
+        for i in range(args.horizon_length):
 
-                future_probabs = F.softmax(logits, dim=-1)  # Get softmax
-                future_probabs = torch.unsqueeze(future_probabs, dim=1)
+            future_probabs = F.softmax(logits, dim=-1)  # Get softmax
+            future_probabs = torch.unsqueeze(future_probabs, dim=1)
 
-                _, new_true_past = model(future_probabs, past=new_true_past)
-                future_hidden = model.hidden_states  # Get expected hidden states
-                new_accumulated_hidden = new_accumulated_hidden + torch.sum(future_hidden, dim=1)
+            _, new_true_past = model(future_probabs, past=new_true_past)
+            future_hidden = model.hidden_states  # Get expected hidden states
+            new_accumulated_hidden = new_accumulated_hidden + torch.sum(future_hidden, dim=1)
 
-            predicted_sentiment = classifier(new_accumulated_hidden / (current_length + 1 + args.horizon_length))
+        for classifier, multilabel, label_class in zip(classifier_arr, multilabel_arr, label_arr):
+            if multilabel:
+                bce_loss = torch.nn.BCEWithLogitsLoss(reduction='sum')
+                predicted_sentiment = classifier(new_accumulated_hidden / (current_length + 1 + args.horizon_length))
 
-            label = torch.tensor([args.label_class], device='cuda', dtype=torch.long).repeat(batch_size)
-            discrim_loss = ce_loss(predicted_sentiment, label)
-            loss += discrim_loss
+                label = torch.tensor([label_class], device='cuda', dtype=torch.long).repeat(batch_size, 1)
+                discrim_loss = bce_loss(predicted_sentiment, label.float())
+                loss += discrim_loss/3.
 
-            ## LOGGING
-            ce_loss_logging = torch.nn.CrossEntropyLoss(reduction='none')
-            loss_logging = ce_loss_logging(predicted_sentiment, label).detach().tolist()
-            loss_per_iter.append(loss_logging)
+            else:
+                ce_loss = torch.nn.CrossEntropyLoss(reduction='sum')
+                predicted_sentiment = classifier(new_accumulated_hidden / (current_length + 1 + args.horizon_length))
 
-        if args.loss_type == 5:
-            bce_loss = torch.nn.BCEWithLogitsLoss(reduction='sum')
-            new_true_past = true_past
-            for i in range(args.horizon_length):
-
-                future_probabs = F.softmax(logits, dim=-1)  # Get softmax
-                future_probabs = torch.unsqueeze(future_probabs, dim=1)
-
-                _, new_true_past = model(future_probabs, past=new_true_past)
-                future_hidden = model.hidden_states  # Get expected hidden states
-                new_accumulated_hidden = new_accumulated_hidden + torch.sum(future_hidden, dim=1)
-
-            predicted_sentiment = classifier(new_accumulated_hidden / (current_length + 1 + args.horizon_length))
-
-            label = torch.tensor([1], device='cuda', dtype=torch.float).repeat(batch_size)
-            discrim_loss = bce_loss(predicted_sentiment, label.unsqueeze(-1))
-            loss += discrim_loss
-
-            ## LOGGING
-            bce_loss_logging = torch.nn.BCEWithLogitsLoss(reduction='none')
-            loss_per_iter.append(bce_loss_logging(predicted_sentiment, label.unsqueeze(-1)).detach().tolist())
+                label = torch.tensor([label_class], device='cuda', dtype=torch.long).repeat(batch_size)
+                discrim_loss = ce_loss(predicted_sentiment, label)
+                loss += discrim_loss
 
         kl_loss = 0.0
         if kl_scale > 0.0:
@@ -145,12 +127,7 @@ def perturb_past(past, model, prev, args, classifier, stepsize=0.01, vocab_size=
         # print()
 
         loss.backward(retain_graph=True)
-        if grad_norms is not None and args.loss_type == 1:
-            grad_norms = [torch.max(grad_norms[index],
-                torch.norm_except_dim(p_.grad * window_mask, dim=1))
-                    for index, p_ in enumerate(past_perturb)]
-        else:
-            grad_norms = [(torch.norm_except_dim(p_.grad * window_mask, dim=1) + SmallConst) for index, p_ in enumerate(past_perturb)]
+        grad_norms = [(torch.norm_except_dim(p_.grad * window_mask, dim=1) + SmallConst) for index, p_ in enumerate(past_perturb)]
 
         grad = [
             -stepsize * (p_.grad * window_mask / grad_norms[index] ** args.gamma).data.cpu().numpy()
@@ -193,7 +170,7 @@ def top_k_logits(logits, k, probs=False):
             return torch.where(logits < batch_mins, torch.ones_like(logits) * 0.0, logits)
         return torch.where(logits < batch_mins, torch.ones_like(logits) * -1e10, logits)
 
-def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',repetition_penalty=1.0,classifier_arr=None,multilabel_arr=None):
+def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',repetition_penalty=1.0,classifier_arr=None,multilabel_arr=None,label_arr=None):
 
     torch.cuda.empty_cache()
     torch.manual_seed(args.seed)
@@ -201,7 +178,7 @@ def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',re
     np.random.seed(args.seed)
     original, _, _ = sample_from_hidden(model=model, args=args, context=context,
                                             device=device, perturb=False,
-                                            classifier_arr=classifier_arr, multilabel_arr=multilabel_arr,
+                                            classifier_arr=classifier_arr, multilabel_arr=multilabel_arr, label_arr=label_arr,
                                             repetition_penalty=repetition_penalty)
     torch.cuda.empty_cache()
 
@@ -212,7 +189,7 @@ def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',re
 
     perturbed, _, loss_in_time = sample_from_hidden(model=model, args=args, context=context,
                                                         device=device, perturb=True,
-                                                        classifier_arr=classifier_arr, multilabel_arr=multilabel_arr,
+                                                        classifier_arr=classifier_arr, multilabel_arr=multilabel_arr, label_arr=label_arr,
                                                         repetition_penalty=repetition_penalty)
     t1 = time.time()
     print("time",t1-t0)
@@ -220,7 +197,7 @@ def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',re
     return original, perturbed, loss_in_time
 
 
-def sample_from_hidden(model, args, classifier_arr, multilabel_arr, context=None, past=None, device='cuda',
+def sample_from_hidden(model, args, classifier_arr, multilabel_arr, label_arr, context=None, device='cuda',
                        sample=True, perturb=True, repetition_penalty=1.0):
     output = torch.tensor(context, device=device, dtype=torch.long) if context else None
     output_response = output.new_zeros([output.size(0),0])
@@ -234,22 +211,10 @@ def sample_from_hidden(model, args, classifier_arr, multilabel_arr, context=None
         # Note that GPT takes 2 inputs: past + current-token
         # Therefore, use everything from before current i/p token to generate relevant past
 
-        if past is None and output is not None:
-            prev = output[:, -1:]
-            _, past = model(output[:, :-1])
-            original_probs, true_past = model(output)
-            true_hidden = model.hidden_states
-
-        else:
-            original_probs, true_past = model(output)
-            true_hidden = model.hidden_states
-
-        # Modify the past if necessary
-
-        if i >= args.grad_length:
-            current_stepsize = args.stepsize * 0
-        else:
-            current_stepsize = args.stepsize
+        prev = output[:, -1:]
+        _, past = model(output[:, :-1])
+        original_probs, true_past = model(output)
+        true_hidden = model.hidden_states
 
         if not perturb or args.num_iterations == 0:
             perturbed_past = past
@@ -259,12 +224,12 @@ def sample_from_hidden(model, args, classifier_arr, multilabel_arr, context=None
             accumulated_hidden = torch.sum(accumulated_hidden, dim=1)
             len_prefix = true_hidden.size(1)
             perturbed_past, _, grad_norms, loss_per_iter = perturb_past(past, model, prev, args,
-                                                                        stepsize=current_stepsize,
+                                                                        stepsize=args.stepsize,
                                                                         original_probs=original_probs,
                                                                         true_past=true_past,
                                                                         accumulated_hidden=accumulated_hidden,
                                                                         current_output=true_hidden[:,len_prefix-i:,:],
-                                                                        classifier=classifier,
+                                                                        classifier_arr=classifier_arr, multilabel_arr=multilabel_arr, label_arr=label_arr,
                                                                         grad_norms=grad_norms)
             loss_in_time.append(loss_per_iter)
 

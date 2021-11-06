@@ -21,7 +21,20 @@ torch.manual_seed(0)
 torch.cuda.manual_seed(0)
 np.random.seed(0)
 
-def evaluate(args, model, enc, classifier_arr, class2idx_arr, multilabel_arr, device):
+def get_random_label_arr(idx2class_arr, multilabel_arr):
+    label_arr = []
+    for multilabel, idx2class in zip(multilabel_arr, idx2class_arr):
+        if multilabel:
+            num_choices = random.choice(range(4))
+            label_classes = random.choices(range(len(idx2class)), k=num_choices)
+            label_arr.append([1 if e in label_classes else 0 for e in range(len(idx2class))])
+        else:
+            label_class = random.choice(range(len(idx2class)))
+            label_arr.append(label_class)
+
+    return label_arr
+
+def evaluate(args, model, enc, classifier_arr, idx2class_arr, multilabel_arr, device):
     list_starters = parse_prefixes(args,tokenizer=enc,seed=args.seed)
 
     global_acc_original, global_acc_PPLM = [], []
@@ -33,8 +46,11 @@ def evaluate(args, model, enc, classifier_arr, class2idx_arr, multilabel_arr, de
         list_starters = list_starters[num_lines:]
         mode = 'a'
 
-    with jsonlines.open(name, mode=mode) as writer:
+    with jsonlines.open(name, mode=mode, flush=True) as writer:
         for id_starter, starter in enumerate(list_starters):
+            print(id_starter, len(list_starters))
+
+            label_arr = get_random_label_arr(idx2class_arr, multilabel_arr)
 
             history = starter["conversation"]
             context_tokens = sum([enc.encode(h) + [EOS_ID] for h in history],[])
@@ -44,15 +60,20 @@ def evaluate(args, model, enc, classifier_arr, class2idx_arr, multilabel_arr, de
                                                                             args=args, context=context_tokens,
                                                                             device=device, repetition_penalty=args.repetition_penalty,
                                                                             classifier_arr=[ele.classifier_head for ele in classifier_arr],
-                                                                            multilabel_arr=multilabel_arr)
+                                                                            multilabel_arr=multilabel_arr,
+                                                                            label_arr=label_arr)
 
+            # print(original_sentence)
+            # print(perturb_sentence)
             dgpt_out = {"speaker":"DGPT","text":original_sentence.tolist()}
             pplm_out = {"speaker":"PPLM","text":perturb_sentence.tolist(),"loss":loss}
-            hypotesis, acc_pplm, plots_array = scorer(args, pplm_out, classifier, enc, class2idx, starter["knowledge"], plot=False, gold=starter["gold"])
-            hypotesis_original, acc_original, _ = scorer(args, dgpt_out, classifier, enc, class2idx, starter["knowledge"], gold=starter["gold"])
+            hypotesis, acc_pplm, plots_array = scorer(args, pplm_out, classifier_arr, enc, idx2class_arr, label_arr, starter["knowledge"], plot=False, gold=starter["gold"])
+            hypotesis_original, acc_original, _ = scorer(args, dgpt_out, classifier_arr, enc, idx2class_arr, label_arr, starter["knowledge"], gold=starter["gold"])
+
+            # exit()
             global_acc_PPLM.append(acc_pplm)
             global_acc_original.append(acc_original)
-            writer.write({"acc":{"DGPT":acc_original,"PPLM":acc_pplm}, "hyp":{"DGPT":hypotesis_original,"PPLM":hypotesis},"conversation":starter})
+            writer.write({"acc":{"DGPT":acc_original,"PPLM":acc_pplm}, "hyp":{"DGPT":hypotesis_original,"PPLM":hypotesis}, "conversation":starter, "labels":label_arr})
 
 
     print(f"Global Acc original:{np.mean(global_acc_original)} Acc PPLM:{np.mean(global_acc_PPLM)}")
@@ -75,7 +96,6 @@ if __name__ == '__main__':
     parser.add_argument("--gm_scale", type=float, default=0.95)
     parser.add_argument("--kl_scale", type=float, default=0.01)
     parser.add_argument('--nocuda', action='store_true', help='no cuda')
-    parser.add_argument('--grad_length', type=int, default=10000)
     parser.add_argument('--num_samples', type=int, default=1,
                         help='Number of samples to generate from the modified latents')
     parser.add_argument('--horizon_length', type=int, default=1, help='Length of future to optimize over')
@@ -118,8 +138,8 @@ if __name__ == '__main__':
     for param in model.parameters():
         param.requires_grad = False
 
-    classifier_arr, class2idx_arr, multilabel_arr = load_classifier_arr(args, model)
+    classifier_arr, idx2class_arr, multilabel_arr = load_classifier_arr(args, model)
 
     ## set args.num_iterations to 0 to run the adapter
     ## set args.num_iterations to 50 to run WD
-    evaluate(args, model, tokenizer, classifier_arr, class2idx_arr, multilabel_arr, device)
+    evaluate(args, model, tokenizer, classifier_arr, idx2class_arr, multilabel_arr, device)

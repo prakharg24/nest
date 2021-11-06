@@ -64,11 +64,11 @@ def load_classifier(args, model):
         ).to("cuda")
         classifier.eval()
 
-    return classifier, class2idx
+    return classifier, idx2class
 
 def load_classifier_arr(args, model):
-    args.discrim = 'sentiment'
-    sent_classifier, sent_class2idx = load_classifier(args, model)
+    # args.discrim = 'sentiment'
+    # sent_classifier, sent_class2idx = load_classifier(args, model)
 
     args.discrim = 'emotion'
     emot_classifier, emot_class2idx = load_classifier(args, model)
@@ -76,9 +76,9 @@ def load_classifier_arr(args, model):
     args.discrim = 'intent'
     intn_classifier, intn_class2idx = load_classifier(args, model)
 
-    classifier_arr = [sent_classifier, emot_classifier, intn_classifier]
-    class2idx_arr = [sent_class2idx, emot_class2idx, intn_class2idx]
-    multilabel_arr = [False, False, True]
+    classifier_arr = [emot_classifier, intn_classifier]
+    class2idx_arr = [emot_class2idx, intn_class2idx]
+    multilabel_arr = [False, True]
 
     return classifier_arr, class2idx_arr, multilabel_arr
 
