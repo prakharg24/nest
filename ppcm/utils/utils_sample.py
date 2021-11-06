@@ -22,7 +22,7 @@ def _prec_recall_f1_score(pred_items, gold_items):
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
 
-def scorer(args,turn,classifier,enc,idx2class,label,knowledge,plot=False,gold=None):
+def scorer(args,turn,classifier_arr,enc,idx2class_arr,label_arr,knowledge,plot=False,gold=None):
     hypotesis = []
     plots_array = []
     if(plot):
@@ -46,27 +46,35 @@ def scorer(args,turn,classifier,enc,idx2class,label,knowledge,plot=False,gold=No
         sent_p = [knowledge for i in range(args.num_samples)]
         x = (sent_p,x)
 
-    for j, (loss,correct,predition) in enumerate(zip(*predict(args,classifier,x,idx2class,label))):
-        hypotesis[j] = [hypotesis[j][0],loss,hypotesis[j][1],correct,predition,hypotesis[j][3],hypotesis[j][2]]
+    for j, (loss,predition) in enumerate(zip(*predict(args,classifier_arr,x,idx2class_arr,label_arr))):
+        hypotesis[j] = [hypotesis[j][0],loss,hypotesis[j][1],0,predition,hypotesis[j][3],hypotesis[j][2]]
 
     hypotesis = sorted(hypotesis, key = lambda x: x[1]) ## sort by loss
     acc = hypotesis[0][3] ## if it is correctly classifed the sample with the lowest loss
     hypotesis = [[h[0],truncate(h[1],4),truncate(h[2],4),h[4],h[5],h[6]] for h in hypotesis]
     return hypotesis, acc, plots_array
 
-def predict(args, classifier, X, idx2class, label):
+def predict(args, classifier_arr, X, idx2class_arr, label_arr):
+
     if(type(X) is tuple):
-        input_p = pad_sequences([torch.tensor(classifier.tokenizer.encode(s)) for s in X[0]])
-        input_h = pad_sequences([torch.tensor(classifier.tokenizer.encode(s)) for s in X[1]])
+        input_p = pad_sequences([torch.tensor(classifier_arr[0].tokenizer.encode(s)) for s in X[0]])
+        input_h = pad_sequences([torch.tensor(classifier_arr[0].tokenizer.encode(s)) for s in X[1]])
         X = [input_p,input_h]
     else:
-        X = pad_sequences([torch.tensor(classifier.tokenizer.encode(s)) for s in X])
+        X = pad_sequences([torch.tensor(classifier_arr[0].tokenizer.encode(s)) for s in X])
 
-    output_t = classifier(X)
+    for classifier, idx2class, label in zip(classifier_arr, idx2class_arr, label_arr):
 
-    target_t = torch.tensor([label], device='cuda', dtype=torch.long).repeat(args.num_samples)
-    ce_loss_logging = torch.nn.CrossEntropyLoss(reduction='none')
-    loss = ce_loss_logging(output_t, target_t).detach().tolist()
-    pred_t = output_t.argmax(dim=1, keepdim=True)
-    correct = pred_t.eq(target_t.view_as(pred_t)).detach().tolist()
-    return loss, sum(correct, []), [idx2class[int(pred[0])] for pred in pred_t.detach().tolist()]
+        output_t = classifier(X)
+
+        if isinstance(label, int):
+            target_t = torch.tensor([label], device='cuda', dtype=torch.long).repeat(args.num_samples)
+            ce_loss_logging = torch.nn.CrossEntropyLoss(reduction='none')
+            loss = ce_loss_logging(output_t, target_t).detach().tolist()
+            pred_t = output_t.argmax(dim=1, keepdim=True)
+            out_labels = [idx2class[int(pred[0])] for pred in pred_t.detach().tolist()]
+        else:
+            target_t = torch.tensor([label], device='cuda', dtype=torch.long).repeat(args.num_samples, 1)
+            bce_loss_logging = torch.nn.BCEWithLogitsLoss(reduction='none')
+            loss += bce_loss_logging(output_t, target_t.float()).detach().tolist()
+    return loss, out_labels

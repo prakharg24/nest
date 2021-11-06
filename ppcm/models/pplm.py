@@ -99,7 +99,7 @@ def perturb_past(past, model, prev, args, classifier_arr, multilabel_arr, label_
 
                 label = torch.tensor([label_class], device='cuda', dtype=torch.long).repeat(batch_size, 1)
                 discrim_loss = bce_loss(predicted_sentiment, label.float())
-                loss += discrim_loss
+                loss += discrim_loss/3.
 
             else:
                 ce_loss = torch.nn.CrossEntropyLoss(reduction='sum')

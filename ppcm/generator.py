@@ -46,14 +46,13 @@ def evaluate(args, model, enc, classifier_arr, idx2class_arr, multilabel_arr, de
         list_starters = list_starters[num_lines:]
         mode = 'a'
 
-    with jsonlines.open(name, mode=mode) as writer:
+    with jsonlines.open(name, mode=mode, flush=True) as writer:
         for id_starter, starter in enumerate(list_starters):
+            print(id_starter, len(list_starters))
 
             label_arr = get_random_label_arr(idx2class_arr, multilabel_arr)
 
             history = starter["conversation"]
-            print(history)
-            print(label_arr)
             context_tokens = sum([enc.encode(h) + [EOS_ID] for h in history],[])
 
             context_tokens = [context_tokens for _ in range(args.num_samples)]
@@ -68,18 +67,13 @@ def evaluate(args, model, enc, classifier_arr, idx2class_arr, multilabel_arr, de
             # print(perturb_sentence)
             dgpt_out = {"speaker":"DGPT","text":original_sentence.tolist()}
             pplm_out = {"speaker":"PPLM","text":perturb_sentence.tolist(),"loss":loss}
-            hypotesis, acc_pplm, plots_array = scorer(args, pplm_out, classifier_arr[0], enc, idx2class_arr[0], label_arr[0], starter["knowledge"], plot=False, gold=starter["gold"])
-            hypotesis_original, acc_original, _ = scorer(args, dgpt_out, classifier_arr[0], enc, idx2class_arr[0], label_arr[0], starter["knowledge"], gold=starter["gold"])
+            hypotesis, acc_pplm, plots_array = scorer(args, pplm_out, classifier_arr, enc, idx2class_arr, label_arr, starter["knowledge"], plot=False, gold=starter["gold"])
+            hypotesis_original, acc_original, _ = scorer(args, dgpt_out, classifier_arr, enc, idx2class_arr, label_arr, starter["knowledge"], gold=starter["gold"])
 
-            print(hypotesis)
-            print(acc_pplm)
-            print(plots_array)
-            print(hypotesis_original)
-            print(acc_original)
             # exit()
             global_acc_PPLM.append(acc_pplm)
             global_acc_original.append(acc_original)
-            writer.write({"acc":{"DGPT":acc_original,"PPLM":acc_pplm}, "hyp":{"DGPT":hypotesis_original,"PPLM":hypotesis},"conversation":starter})
+            writer.write({"acc":{"DGPT":acc_original,"PPLM":acc_pplm}, "hyp":{"DGPT":hypotesis_original,"PPLM":hypotesis}, "conversation":starter, "labels":label_arr})
 
 
     print(f"Global Acc original:{np.mean(global_acc_original)} Acc PPLM:{np.mean(global_acc_PPLM)}")
