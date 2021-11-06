@@ -16,7 +16,7 @@ from torchtext.legacy import data as torchtext_data
 from torchtext.legacy import datasets
 from tqdm import tqdm, trange
 import os
-from sklearn.metrics import f1_score
+from sklearn.metrics import accuracy_score, f1_score
 import torchtext
 from models.heads import Discriminator
 
@@ -83,7 +83,16 @@ def collate_fn(data):
 
     return x_batch, y_batch
 
-def load_dataset(idx2class, pretrained_model, train_iterator, test_iterator, cached=False, detokenize=False):
+def make_anno_dict(anno_arr):
+    outdict = {}
+
+    for ele in anno_arr:
+        outdict[ele[0]] = ele[1]
+
+    return outdict
+
+def load_dataset(idx2class, pretrained_model, train_iterator, test_iterator,
+                 cached=False, detokenize=False, textlabel=True):
 
     class2idx = {c: i for i, c in enumerate(idx2class)}
     discriminator = Discriminator(
@@ -99,7 +108,9 @@ def load_dataset(idx2class, pretrained_model, train_iterator, test_iterator, cac
         seq = discriminator.tokenizer.encode(ele["text"])
         seq = torch.tensor(seq, device=device, dtype=torch.long)
         x.append(seq)
-        y.append(class2idx[ele["label"]])
+        if textlabel:
+            ele["label"] = class2idx[ele["label"]]
+        y.append(ele["label"])
 
     train_dataset = Dataset(x, y)
 
@@ -110,7 +121,9 @@ def load_dataset(idx2class, pretrained_model, train_iterator, test_iterator, cac
         seq = discriminator.tokenizer.encode(ele["text"])
         seq = torch.tensor(seq, device=device, dtype=torch.long)
         test_x.append(seq)
-        test_y.append(class2idx[ele["label"]])
+        if textlabel:
+            ele["label"] = class2idx[ele["label"]]
+        test_y.append(ele["label"])
 
     test_dataset = Dataset(test_x, test_y)
 
@@ -118,28 +131,36 @@ def load_dataset(idx2class, pretrained_model, train_iterator, test_iterator, cac
 
 
 def train_epoch(args,data_loader, discriminator, optimizer,
-                epoch=0, cached=False):
+                epoch=0, cached=False, multi_label=False):
     samples_so_far = 0
     discriminator.train_custom()
 
-    ce_loss = torch.nn.CrossEntropyLoss()
+    if multi_label:
+        loss_fn = torch.nn.BCEWithLogitsLoss()
+    else:
+        loss_fn = torch.nn.CrossEntropyLoss()
     for batch_idx, (input_t, target_t) in tqdm(enumerate(data_loader)):
         input_t, target_t = input_t.to(device), target_t.to(device)
 
         optimizer.zero_grad()
 
         output_t = discriminator(input_t)
-        loss = ce_loss(output_t, target_t)
+        if multi_label:
+            target_t = target_t.float()
+        loss = loss_fn(output_t, target_t)
         loss.backward(retain_graph=True)
         optimizer.step()
 
         samples_so_far += len(input_t)
 
-def evaluate_performance(args,data_loader, discriminator, cached=False):
+def evaluate_performance(args,data_loader, discriminator, cached=False, multi_label=False):
     discriminator.eval()
     test_loss = 0
     correct = 0
-    ce_loss = torch.nn.CrossEntropyLoss()
+    if multi_label:
+        loss_fn = torch.nn.BCEWithLogitsLoss()
+    else:
+        loss_fn = torch.nn.CrossEntropyLoss()
     predicted_list = []
     target_list = []
     with torch.no_grad():
@@ -147,17 +168,21 @@ def evaluate_performance(args,data_loader, discriminator, cached=False):
             input_t, target_t = input_t.to(device), target_t.to(device)
             output_t = discriminator(input_t)
             # sum up batch loss
-            test_loss += ce_loss(output_t, target_t).item()
-            # get the index of the max log-probability
-            pred_t = output_t.argmax(dim=1, keepdim=True)
-            correct += pred_t.eq(target_t.view_as(pred_t)).sum().item()
-            predicted_list.append(pred_t.squeeze().tolist())
-            target_list.append(target_t.tolist())
+            if multi_label:
+                target_t = target_t.float()
+            test_loss += loss_fn(output_t, target_t).item()
 
+            target_list.extend(target_t.cpu().detach().numpy().tolist())
+            if multi_label:
+                predicted_list.extend(torch.sigmoid(output_t).cpu().detach().numpy().tolist())
+            else:
+                predicted_list.extend(output_t.argmax(dim=1).cpu().detach().numpy().tolist())
+
+    if multi_label:
+        predicted_list = np.array(predicted_list) >=0.5
     test_loss /= len(data_loader.dataset)
-    accuracy = correct / len(data_loader.dataset)
-    F1 = f1_score(sum(target_list,[]), sum(predicted_list,[]), average='macro')
-
+    accuracy = accuracy_score(target_list, predicted_list)
+    F1 = f1_score(target_list, predicted_list, average='macro')
 
     return test_loss, accuracy, F1
 
@@ -190,6 +215,7 @@ def train_discriminator(
         save_model=False, cached=False, no_cuda=False):
     global device
     device = "cuda" if torch.cuda.is_available() and not no_cuda else "cpu"
+    multi_label = False
 
     print("Preprocessing {} dataset...".format(dataset))
     start = time.time()
@@ -215,7 +241,7 @@ def train_discriminator(
 
         discriminator, train_dataset, test_dataset = load_dataset(idx2class, pretrained_model,
                                                                   train_iterator, test_iterator,
-                                                                  cached=cached, detokenize=True)
+                                                                  cached=cached, detokenize=True, textlabel=True)
 
     elif dataset == 'emotion':
 
@@ -234,9 +260,38 @@ def train_discriminator(
 
         discriminator, train_dataset, test_dataset = load_dataset(idx2class, pretrained_model,
                                                                   train_iterator, test_iterator,
-                                                                  cached=cached, detokenize=False)
+                                                                  cached=cached, detokenize=False, textlabel=True)
 
-    # elif dataset == 'intent':
+    elif dataset == 'intent':
+
+        idx2class = ['elicit-pref', 'no-need', 'uv-part', 'other-need', 'showing-empathy', 'vouch-fair', 'small-talk', 'self-need', 'promote-coordination', 'non-strategic']
+        extra_utterances = ['Submit-Deal', 'Accept-Deal', 'Reject-Deal', 'Walk-Away', 'Submit-Post-Survey']
+        multi_label = True
+
+        train_data = json.load(open('data/casino/casino_train.json'))
+        test_data = json.load(open('data/casino/casino_test.json'))
+
+        def extract_intent_from_dialogue(inp_data):
+            out_iterator = []
+            for item in inp_data:
+                complete_log = item['chat_logs']
+                annotations = make_anno_dict(item['annotations'])
+
+                for i, utterance in enumerate(complete_log):
+                    if utterance['text'] in extra_utterances:
+                        continue
+                    elif utterance['text'] in annotations:
+                        labels = annotations[utterance['text']].split(",")
+                        label_arr = [int(ann in labels) for ann in idx2class]
+                        out_iterator.append({"text": utterance['text'], "label": label_arr})
+            return out_iterator
+
+        train_iterator = extract_intent_from_dialogue(train_data)
+        test_iterator = extract_intent_from_dialogue(test_data)
+
+        discriminator, train_dataset, test_dataset = load_dataset(idx2class, pretrained_model,
+                                                                  train_iterator, test_iterator,
+                                                                  cached=cached, detokenize=False, textlabel=False)
 
     end = time.time()
     print(f"Train:{len(train_dataset)}")
@@ -285,13 +340,14 @@ def train_discriminator(
             data_loader=train_loader,
             optimizer=optimizer,
             epoch=epoch,
-            cached=cached
+            cached=cached,
+            multi_label=multi_label
         )
 
         loss_train, accuracy_train, f1_train = evaluate_performance(
             args=args,
             data_loader=train_loader,
-            discriminator=discriminator, cached=cached
+            discriminator=discriminator, cached=cached, multi_label=multi_label
         )
         accuracy_per_epoch_train.append(accuracy_train)
         F1_per_epoch_train.append(f1_train)
@@ -299,7 +355,7 @@ def train_discriminator(
         loss, accuracy, f1 = evaluate_performance(
             args=args,
             data_loader=test_loader,
-            discriminator=discriminator, cached=cached
+            discriminator=discriminator, cached=cached, multi_label=multi_label
         )
         accuracy_per_epoch.append(accuracy)
         F1_per_epoch.append(f1)
@@ -327,11 +383,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Train a discriminator on top of GPT-2 representations")
     parser.add_argument("--dataset", type=str, default="sentiment",
-                        choices=("sentiment", "clickbait", "toxic",
-                                 "daily_dialogue_topics","daily_dialogue_act",
-                                 "daily_dialogue_emotion","generic","emocap","NLI","MNLI","DNLI",
-                                 "TC_AG_NEWS","TC_SogouNews","TC_DBpedia","TC_YahooAnswers","empathetic_dialogue",
-                                 "emotion","pun"),
                         help="dataset to train the discriminator on."
                              "In case of generic, the dataset is expected"
                              "to be a TSBV file with structure: class \\t text")

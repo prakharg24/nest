@@ -20,18 +20,6 @@ from models.pytorch_pretrained_bert.modeling_adapter import GPT2LMHeadModel, GPT
 from utils.helper import load_model, average_distributed_scalar, load_model_recursive
 from utils.helper import parse_prefixes
 from metric.lm_score import get_ppl
-######################################################################################
-# CUDA_VISIBLE_DEVICES=1 python train_supervised_adapter.py --dataset SENT --label very_negative --iter 75 (1)
-# CUDA_VISIBLE_DEVICES=1 python train_supervised_adapter.py --dataset SENT --label very_negative --iter 75 --kl_weight 0.5 (2)
-# CUDA_VISIBLE_DEVICES=1 python train_supervised_adapter.py --dataset SENT --label very_negative --iter 75 --kl_weight 0.5 --lr 6.25e-4 (3)
-# CUDA_VISIBLE_DEVICES=1 python train_supervised_adapter.py --dataset SENT --label very_negative --iter 75 --lr 6.25e-4 (4)
-# CUDA_VISIBLE_DEVICES=3 python main.py -D sentiment --label_class 3 --length 30 --num_samples 10 --evaluate --verbose --all_starter --load_check_point_adapter runs/SENT_very_negative_Apr02_13-16-33/pytorch_model.bin
-# CUDA_VISIBLE_DEVICES=6 python main.py -D sentiment --label_class 3 --length 30 --num_samples 10 --interact --verbose --all_starter --load_check_point_adapter runs/question_0.5/pytorch_model.bin --speaker DGPT --repetition_penalty 1.2
-# python train_supervised_adapter.py --dataset SENT --label very_negative --iter 75 --lr 6.25e-4 (4)
-# python train_supervised_adapter.py --dataset SENT --label very_positive --iter 25
-# python train_supervised_adapter.py --dataset TOXI --label toxic --iter 25
-# python train_supervised_adapter.py --dataset QUEST --label question --iter 25
-######################################################################################
 
 MODEL_INPUTS = ["input_ids", "lm_labels"]
 EOS_ID = 50256
@@ -87,8 +75,8 @@ def build_input_from_segments(args, history, reply, tokenizer):
 
 def make_data_loader(args,tokenizer):
     mapper = {"very_negative":"results/evaluate/sentiment_class_very_negative/sentiment_class_very_negative_iter_75_step_0.02_sample_10_wd_False_bce_False.jsonl",
-    "very_positive":"results/evaluate/sentiment_class_very_positive/sentiment_class_very_positive_iter_0_step_0.02_sample_10_wd_False_bce_False_1.jsonl",
-    # "very_positive":"results/evaluate/sentiment_class_very_positive/sentiment_class_very_positive_iter_25_step_0.02_sample_10_wd_False_bce_False.jsonl",
+    # "very_positive":"results/evaluate/sentiment_class_very_positive/sentiment_class_very_positive_iter_0_step_0.02_sample_10_wd_False_bce_False_1.jsonl",
+    "very_positive":"results/evaluate/sentiment_class_very_positive/sentiment_class_very_positive_iter_25_step_0.02_sample_10_wd_False_bce_False.jsonl",
     "toxic":"results/evaluate/toxicity_class_toxic/toxicity_class_toxic_iter_75_step_0.02_sample_10_wd_False_bce_False.jsonl",
     "question":"results/evaluate/daily_dialogue_act_class_question/daily_dialogue_act_class_question_iter_75_step_0.02_sample_10_wd_False_bce_False_1.jsonl",
     "Business": "results/evaluate/AG_NEWS_class_Business/AG_NEWS_class_Business_iter_75_step_0.02_sample_10_wd_False_bce_False_1.jsonl",
