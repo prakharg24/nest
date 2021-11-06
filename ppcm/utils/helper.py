@@ -64,7 +64,7 @@ def load_classifier(args, model):
         ).to("cuda")
         classifier.eval()
 
-    return classifier, class2idx
+    return classifier, idx2class
 
 def load_classifier_arr(args, model):
     args.discrim = 'sentiment'
