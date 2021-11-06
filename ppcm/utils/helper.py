@@ -6,7 +6,7 @@ rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
 #rc('font',**{'family':'serif','serif':['Palatino']})
 # rc('text', usetex=True)
 import matplotlib.pyplot as plt
-from models.heads import AttentionHead, ClassificationHead, Discriminator
+from models.heads import ClassificationHead, Discriminator
 import os
 import torch
 import torch.nn as nn
@@ -18,19 +18,17 @@ EOS_ID = 50256
 import logging
 logger = logging.getLogger(__name__)
 
-def load_classifier(args,model):
+def load_classifier(args, model):
     print(f"Loading Classifier {args.discrim}")
     classifier = None
     class2idx = None
     if args.discrim == 'sentiment':
-        idx2class = ["positive", "negative", "very positive", "very negative",
-                     "neutral"]
+        idx2class = ["positive", "negative", "very positive", "very negative", "neutral"]
         class2idx = {c: i for i, c in enumerate(idx2class)}
-        classes_num = len(idx2class)
         models_weight = "models/discriminators/DIALOGPT_sentiment_classifier_head_best.pt"
 
         classifier = Discriminator(
-            class_size=classes_num,
+            class_size=len(idx2class),
             pretrained_model="medium",
             cached_mode=False,
             load_weight=models_weight,
@@ -38,39 +36,51 @@ def load_classifier(args,model):
         ).to("cuda")
         classifier.eval()
 
-    elif args.discrim == 'daily_dialogue_act':
-        idx2class = ["inform", "question", "directive", "commissive"]
+    elif args.discrim == 'emotion':
+        idx2class = ["anger", "fear", "joy", "love", "sadness", "surprise"]
         class2idx = {c: i for i, c in enumerate(idx2class)}
+        models_weight = "models/discriminators/DIALOGPT_emotion_classifier_head_best.pt"
 
         classifier = Discriminator(
             class_size=len(idx2class),
             pretrained_model="medium",
             cached_mode=False,
-            load_weight="models/discriminators/DIALOGPT_daily_dialogue_act.pt",
+            load_weight=models_weight,
             model_pretrained=model
         ).to("cuda")
         classifier.eval()
 
-    elif args.discrim == "AG_NEWS":
-        idx2class = ["World","Sports","Business","Sci/Tech"]
+    elif args.discrim == "intent":
+        idx2class = ['elicit-pref', 'no-need', 'uv-part', 'other-need', 'showing-empathy', 'vouch-fair', 'small-talk', 'self-need', 'promote-coordination', 'non-strategic']
         class2idx = {c: i for i, c in enumerate(idx2class)}
+        models_weight = "models/discriminators/DIALOGPT_intent_classifier_head_best.pt"
 
         classifier = Discriminator(
             class_size=len(idx2class),
             pretrained_model="medium",
             cached_mode=False,
-            load_weight="models/discriminators/DIALOGPT_TC_AG_NEWS_classifier_head.pt",
+            load_weight=models_weight,
             model_pretrained=model
         ).to("cuda")
         classifier.eval()
 
-
-
-
-    class2idx = {i: c for i, c in enumerate(idx2class)}
     return classifier, class2idx
 
+def load_classifier_arr(args, model):
+    args.discrim = 'sentiment'
+    sent_classifier, sent_class2idx = load_classifier(args, model)
 
+    args.discrim = 'emotion'
+    emot_classifier, emot_class2idx = load_classifier(args, model)
+
+    args.discrim = 'intent'
+    intn_classifier, intn_class2idx = load_classifier(args, model)
+
+    classifier_arr = [sent_classifier, emot_classifier, intn_classifier]
+    class2idx_arr = [sent_class2idx, emot_class2idx, intn_class2idx]
+    multilabel_arr = [False, False, True]
+
+    return classifier_arr, class2idx_arr, multilabel_arr
 
 def load_model(model, checkpoint, args, verbose=False):
     if checkpoint is None or checkpoint == "None":

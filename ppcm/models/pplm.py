@@ -25,20 +25,10 @@ from utils.helper import EOS_ID
 
 SmallConst = 1e-15
 
-def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=0.01, vocab_size=50257,
-                 original_probs=None, accumulated_hidden=None, current_output=None, true_past=None, grad_norms=None,
-                 knowledge_to_ent=None):
+def perturb_past(past, model, prev, args, classifier, stepsize=0.01, vocab_size=50257,
+                 original_probs=None, accumulated_hidden=None, current_output=None, true_past=None, grad_norms=None):
     window_length = args.window_length
     gm_scale, kl_scale = args.gm_scale, args.kl_scale
-    one_hot_vectors = []
-    for good_list in good_index:
-        good_list = list(filter(lambda x: len(x) <= 1, good_list))
-        good_list = torch.tensor(good_list).cuda()
-        num_good = good_list.shape[0]
-        one_hot_good = torch.zeros(num_good, vocab_size).cuda()
-        one_hot_good.scatter_(1, good_list, 1)
-        one_hot_vectors.append(one_hot_good)
-
 
     # Generate inital perturbed past
     past_perturb_orig = [(np.random.uniform(0.0, 0.0, p.shape).astype('float32'))
@@ -91,17 +81,6 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
         probabs = F.softmax(logits, dim=-1)
         loss = 0.0
 
-        ## BOW
-        if args.loss_type == 1 or args.loss_type == 3:
-
-            for one_hot_good in one_hot_vectors:
-                good_logits = torch.mm(probabs, torch.t(one_hot_good))
-                loss_word = good_logits
-                loss_word = torch.sum(loss_word, dim=1)
-                loss_word = -torch.log(loss_word)
-                loss += loss_word.sum()
-            loss_per_iter.append(loss_word.detach().tolist())
-
         ## DISCRIMINATOR
         if args.loss_type == 2 or args.loss_type == 3:
             ce_loss = torch.nn.CrossEntropyLoss(reduction='sum')
@@ -125,36 +104,6 @@ def perturb_past(past, model, prev, args, classifier, good_index=None, stepsize=
             ce_loss_logging = torch.nn.CrossEntropyLoss(reduction='none')
             loss_logging = ce_loss_logging(predicted_sentiment, label).detach().tolist()
             loss_per_iter.append(loss_logging)
-
-        if args.loss_type == 4: # Enteiltment loss
-            _ = model(torch.tensor([knowledge_to_ent], device='cuda', dtype=torch.long))
-            hidden_p = model.hidden_states.repeat(batch_size,1,1) #torch.mean(model.hidden_states,dim=1).repeat(batch_size,1)
-
-            ce_loss = torch.nn.CrossEntropyLoss(reduction='sum')
-            new_true_past = true_past
-            for i in range(args.horizon_length):
-
-                future_probabs = F.softmax(logits, dim=-1)  # Get softmax
-                future_probabs = torch.unsqueeze(future_probabs, dim=1)
-
-                _, new_true_past = model(future_probabs, past=new_true_past)
-                future_hidden = model.hidden_states  # Get expected hidden states
-                new_accumulated_hidden = new_accumulated_hidden + torch.sum(future_hidden, dim=1)
-
-            if current_output.size(1)!=0:
-                hidden_h = torch.cat((current_output,future_hidden), dim=1)
-            else:
-                hidden_h = future_hidden
-
-            predicted_NLI = classifier(hidden_p,hidden_h)
-
-            label = torch.tensor([args.label_class], device='cuda', dtype=torch.long).repeat(batch_size)
-            discrim_loss = ce_loss(predicted_NLI, label)
-            loss += discrim_loss
-
-            ## LOGGING
-            ce_loss_logging = torch.nn.CrossEntropyLoss(reduction='none')
-            loss_per_iter.append(ce_loss_logging(predicted_NLI, label).detach().tolist())
 
         if args.loss_type == 5:
             bce_loss = torch.nn.BCEWithLogitsLoss(reduction='sum')
@@ -244,41 +193,16 @@ def top_k_logits(logits, k, probs=False):
             return torch.where(logits < batch_mins, torch.ones_like(logits) * 0.0, logits)
         return torch.where(logits < batch_mins, torch.ones_like(logits) * -1e10, logits)
 
-def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',repetition_penalty=1.0,classifier=None,knowledge=None):
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    np.random.seed(args.seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-    # Get tokens for the list of positive words
-    def list_tokens(word_list,enc):
-        token_list = []
-        for word in word_list:
-            token_list.append(enc.encode(" " + word))
-        return token_list
-
-    good_index = []
-    actual_words = None
-    knowledge_to_ent = None
-    if 'NLI' in args.discrim:
-        knowledge_to_ent = enc.encode(knowledge)
-        args.loss_type = 4
-    elif args.BCE and classifier is not None:
-        args.loss_type = 5
-    elif classifier is not None:
-        args.loss_type = 2
-    else:
-        raise Exception('Supply either --bag-of-words (-B) or --discrim -D')
-
+def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',repetition_penalty=1.0,classifier_arr=None,multilabel_arr=None):
 
     torch.cuda.empty_cache()
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     np.random.seed(args.seed)
-    original, _, _ = sample_from_hidden(model=model,args=args, context=context, device=device,
-                                perturb=False, good_index=good_index, classifier=classifier, repetition_penalty=repetition_penalty,
-                                knowledge_to_ent=knowledge_to_ent)
+    original, _, _ = sample_from_hidden(model=model, args=args, context=context,
+                                            device=device, perturb=False,
+                                            classifier_arr=classifier_arr, multilabel_arr=multilabel_arr,
+                                            repetition_penalty=repetition_penalty)
     torch.cuda.empty_cache()
 
     torch.manual_seed(args.seed)
@@ -287,18 +211,17 @@ def latent_perturb(model, enc, args, context=None, sample=True, device='cuda',re
     t0 = time.time()
 
     perturbed, _, loss_in_time = sample_from_hidden(model=model, args=args, context=context,
-                                                        device=device, perturb=True, good_index=good_index,
-                                                        classifier=classifier, repetition_penalty=repetition_penalty,
-                                                        knowledge_to_ent=knowledge_to_ent)
+                                                        device=device, perturb=True,
+                                                        classifier_arr=classifier_arr, multilabel_arr=multilabel_arr,
+                                                        repetition_penalty=repetition_penalty)
     t1 = time.time()
     print("time",t1-t0)
     torch.cuda.empty_cache()
-    return original, perturbed, None, loss_in_time, actual_words
+    return original, perturbed, loss_in_time
 
 
-def sample_from_hidden(model, args, classifier, context=None, past=None, device='cuda',
-                       sample=True, perturb=True, good_index=None, repetition_penalty=1.0,
-                       knowledge_to_ent=None):
+def sample_from_hidden(model, args, classifier_arr, multilabel_arr, context=None, past=None, device='cuda',
+                       sample=True, perturb=True, repetition_penalty=1.0):
     output = torch.tensor(context, device=device, dtype=torch.long) if context else None
     output_response = output.new_zeros([output.size(0),0])
     grad_norms = None
@@ -336,14 +259,13 @@ def sample_from_hidden(model, args, classifier, context=None, past=None, device=
             accumulated_hidden = torch.sum(accumulated_hidden, dim=1)
             len_prefix = true_hidden.size(1)
             perturbed_past, _, grad_norms, loss_per_iter = perturb_past(past, model, prev, args,
-                                                                        good_index=good_index, stepsize=current_stepsize,
+                                                                        stepsize=current_stepsize,
                                                                         original_probs=original_probs,
                                                                         true_past=true_past,
                                                                         accumulated_hidden=accumulated_hidden,
                                                                         current_output=true_hidden[:,len_prefix-i:,:],
                                                                         classifier=classifier,
-                                                                        grad_norms=grad_norms,
-                                                                        knowledge_to_ent=knowledge_to_ent)
+                                                                        grad_norms=grad_norms)
             loss_in_time.append(loss_per_iter)
 
         logits, past = model(prev, past=perturbed_past)
