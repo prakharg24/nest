@@ -14,7 +14,7 @@ import json
 import sys
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-from bertclassifier.inference import get_emotion_label, get_intent_label
+
 import torch.nn as nn
 import torch.optim as optim
 import random
@@ -24,98 +24,11 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
 from model import Encoder, Decoder, Seq2Seq
+from utils import *
 
 label_to_index = {'elicit-pref':0, 'no-need':1, 'uv-part':2, 'other-need':3, 'showing-empathy':4, 'vouch-fair':5, 'small-talk':6, 'self-need':7, 'promote-coordination':8, 'non-strategic':9, "sadness": 10, "joy": 11, "anger":12, "fear":13, "surprise":14, "love":15}
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-def parse(utterance):
-        emotion_label, emotion_index, emotion_logits = get_emotion_label(utterance)
-        intent_labels, intent_indices, intent_logits = get_intent_label(utterance)
-
-        emotion_dict = {'label' : emotion_label, 'index' : emotion_index, 'logits' : emotion_logits}
-        intent_dict = {'label' : intent_labels, 'index' : intent_indices, 'logits' : intent_logits}
-
-        return {'emotion': emotion_dict, 'intent': intent_dict}
-
-def make_anno_dict(anno_arr):
-    outdict = {}
-
-    for ele in anno_arr:
-        outdict[ele[0]] = ele[1]
-
-    return outdict
-
-def get_dialogs_from_json(fname):
-    print('Loading dialogues from file')
-    extra_utterances = ['Submit-Deal', 'Accept-Deal', 'Reject-Deal', 'Walk-Away', 'Submit-Post-Survey']
-    annotation_list = ['elicit-pref', 'no-need', 'uv-part', 'other-need', 'showing-empathy', 'vouch-fair', 'small-talk', 'self-need', 'promote-coordination', 'non-strategic']
-    max_length = 0
-
-    data = json.load(open(fname))
-
-    dialogue_utterances = {}
-
-    for item in data:
-        X = []
-        num_of_utterances = 0
-        complete_log = item['chat_logs']
-        annotations = make_anno_dict(item['annotations'])
-
-        for i, utterance in enumerate(complete_log):
-            if utterance['text'] in extra_utterances:
-                continue
-            elif utterance['text'] in annotations:
-                X.append((utterance['text']))
-                num_of_utterances+=1
-        if num_of_utterances > max_length:
-          max_length = num_of_utterances  
-        dialogue_utterances[ item['dialogue_id'] ] = X
-
-    return dialogue_utterances, max_length
-
-
-def get_one_hot_encoding(utterance_labels):
-  ohv = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  for label in utterance_labels:
-    if type(label['label']) is str:
-      ohv[label_to_index[label['label']]] = 1
-    else :
-      for lbl in label['label']:
-        ohv[label_to_index[lbl]] = 1
-  return ohv
-
-def get_src_trg_by_fname(fname):
-  dialogue_utterances, max_dialogue_length = get_dialogs_from_json(fname)
-  ohv_pad = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  print('Creating one hot representation of labels')
-  src = []
-  trg = []
-  for dialogue_id, utterances in dialogue_utterances.items():
-    src_per_dialogue = []
-    trg_per_dialogue = []
-    ohv_utterances_in_dialogue = []
-    for utterance in utterances:
-      label = parse(utterance)
-      utterance_labels = []
-      utterance_labels.append(label['emotion'])
-      utterance_labels.append(label['intent'])
-      ohv = get_one_hot_encoding(utterance_labels)
-      ohv_utterances_in_dialogue.append(ohv)
-    if len(ohv_utterances_in_dialogue) < max_dialogue_length:
-      diff = max_dialogue_length - len(ohv_utterances_in_dialogue)
-      for i in range(0, diff):
-        ohv_utterances_in_dialogue.append(ohv_pad)
-    src_per_dialogue = ohv_utterances_in_dialogue
-    trg_per_dialogue = ohv_utterances_in_dialogue[1:]
-    trg_per_dialogue.append( ohv_pad )
-    src.append(src_per_dialogue)
-    trg.append(trg_per_dialogue)
-  src = np.array(src)
-  # src = np.transpose(src, (1, 0, 2))
-  trg = np.array(trg)
-  # trg = np.transpose(trg, (1, 0, 2))
-  return src, trg
 
 class dataLoaderClass(Dataset):
     def __init__(self,x,y):
@@ -141,18 +54,20 @@ fname_valid = '../bertclassifier/data/casino/casino_valid.json'
 ## create dataloaders for train, val, test
 
 #Train
-src_train, trg_train = get_src_trg_by_fname(fname_train)
-training_data = dataLoaderClass(src_train, trg_train)
-# print('src train shape: ', src_train.shape)
-train_iterator = DataLoader(training_data, batch_size=32, shuffle=True)
-print('Loaded training data')
+# src_train, trg_train = get_src_trg_by_fname(fname_train)
+# training_data = dataLoaderClass(src_train, trg_train)
+# # print('src train shape: ', src_train.shape)
+# train_iterator = DataLoader(training_data, batch_size=32, shuffle=True)
+# print('Loaded training data')
 
 #Test
-src_test, trg_test = get_src_trg_by_fname(fname_test)
-test_data = dataLoaderClass(src_test, trg_test)
-# print('src test shape: ', src_test.shape)
-test_iterator = DataLoader(test_data, batch_size=10, shuffle=True)
-print('Loaded test data')
+# src_test, trg_test = get_src_trg_by_fname(fname_test)
+# test_data = dataLoaderClass(src_test, trg_test)
+# # print('src test shape: ', src_test.shape)
+# test_iterator = DataLoader(test_data, batch_size=10, shuffle=True)
+# print('Loaded test data')
+# print('src test sample 1:', src_test[0][0])
+# print('trg test sample 1:', trg_test[0][0])
 
 #Valid
 src_valid, trg_valid = get_src_trg_by_fname(fname_valid)
@@ -230,6 +145,8 @@ def evaluate(model, iterator, criterion):
     model.eval()
     
     epoch_loss = 0
+    fin_targets=[]
+    fin_outputs=[]
     
     with torch.no_grad():
     
@@ -254,10 +171,24 @@ def evaluate(model, iterator, criterion):
             #output = [(trg len - 1) * batch size, output dim]
 
             loss = criterion(output, trg)
+            loss = Variable(loss, requires_grad = True)
             
             epoch_loss += loss.item()
+
+            fin_targets.extend(trg.cpu().detach().numpy().tolist())
+            fin_outputs.extend(output.cpu().detach().numpy().tolist())
+
+    fin_targets = (np.array(fin_targets)).astype(np.bool).tolist()
+    fin_outputs = (np.array(fin_outputs)).astype(np.bool).tolist()
+    print("fin_target size:", np.array(fin_targets).shape)
+    print("first target intent:", fin_targets[0])
+    print("fin_output size:", np.array(fin_outputs).shape)
+    print("first predicted intent:", fin_outputs[0])
+    accuracy = accuracy_score(fin_targets, fin_outputs)
+    f1_score_micro = f1_score(fin_targets, fin_outputs, average='micro')
+    f1_score_macro = f1_score(fin_targets, fin_outputs, average='macro')
         
-    return epoch_loss / len(iterator)
+    return epoch_loss / len(iterator), accuracy, f1_score_micro, f1_score_macro
 
 def epoch_time(start_time, end_time):
     elapsed_time = end_time - start_time
@@ -299,7 +230,7 @@ for epoch in range(N_EPOCHS):
     # train_loss = train(model, train_iterator, optimizer, criterion, CLIP)
     train_loss = train(model, valid_iterator, optimizer, criterion, CLIP)
     # print('train loss:',train_loss)
-    valid_loss = evaluate(model, valid_iterator, criterion)
+    valid_loss, accuracy, f1_score_micro, f1_score_macro = evaluate(model, valid_iterator, criterion)
     
     end_time = time.time()
     
@@ -307,14 +238,20 @@ for epoch in range(N_EPOCHS):
     
     if valid_loss < best_valid_loss:
         best_valid_loss = valid_loss
-        torch.save(model.state_dict(), 'models/s2s-model1.pt')
+        torch.save(model.state_dict(), 'models/s2s-model1-sep-clfs.pt')
     
     print(f'Epoch: {epoch+1:02} | Time: {epoch_mins}m {epoch_secs}s')
     print(f'\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')
     print(f'\t Val. Loss: {valid_loss:.3f} |  Val. PPL: {math.exp(valid_loss):7.3f}')
+    print(f"Accuracy Score = {accuracy}")
+    print(f"F1 Score (Micro) = {f1_score_micro}")
+    print(f"F1 Score (Macro) = {f1_score_macro}")
 
-model.load_state_dict(torch.load('models/s2s-model1.pt'))
+model.load_state_dict(torch.load('models/s2s-model1-sep-clfs.pt'))
 
-test_loss = evaluate(model, test_iterator, criterion)
+test_loss, accuracy, f1_score_micro, f1_score_macro = evaluate(model, test_iterator, criterion)
 
 print(f'| Test Loss: {test_loss:.3f} | Test PPL: {math.exp(test_loss):7.3f} |')
+print(f"Accuracy Score = {accuracy}")
+print(f"F1 Score (Micro) = {f1_score_micro}")
+print(f"F1 Score (Macro) = {f1_score_macro}")

@@ -61,9 +61,11 @@ class Decoder(nn.Module):
         
         self.rnn = nn.LSTM(emb_dim, hid_dim, n_layers, dropout = dropout)
         
-        self.fc_out = nn.Linear(hid_dim, output_dim)
+        self.fc_out_intent = nn.Linear(hid_dim, 10)
+        self.fc_out_emotion = nn.Linear(hid_dim, 6)
         
         self.dropout = nn.Dropout(dropout)
+        self.softmax = nn.Softmax(dim=1)
         
     def forward(self, input, hidden, cell):
         
@@ -98,12 +100,15 @@ class Decoder(nn.Module):
         #output = [1, batch size, hid dim]
         #hidden = [n layers, batch size, hid dim]
         #cell = [n layers, batch size, hid dim]
-        
-        prediction = self.fc_out(output.squeeze(0))
+        # print('output size in decoder before linear layer',output.size())
+        intent_prediction = self.fc_out_intent(output.squeeze(0))
+        linearEmotion =self.fc_out_emotion(output.squeeze(0))
+        # print('output size of liner layer in decoder for emotion:', linearEmotion)
+        emotion_prediction = self.softmax(linearEmotion)
         
         #prediction = [batch size, output dim]
         
-        return prediction, hidden, cell
+        return intent_prediction, emotion_prediction, hidden, cell
 
 class Seq2Seq(nn.Module):
     def __init__(self, encoder, decoder, device):
@@ -131,7 +136,7 @@ class Seq2Seq(nn.Module):
         
         #tensor to store decoder outputs
         outputs = torch.zeros(trg_len, batch_size, trg_vocab_size).to(self.device)
-        # print("output predictions stored array size", outputs.size())
+        print("output predictions stored array size", outputs.size())
         
         # for i in range(input_length):
         #    encoder_hidden, encoder_cell = self.encoder(src[i])
@@ -145,13 +150,29 @@ class Seq2Seq(nn.Module):
         
         # for t in range(1,trg_len):
         for t in range(trg_len):
+
+            output_emotion = torch.zeros(batch_size, 6).to(self.device)
             
             #insert input token embedding, previous hidden and previous cell states
             #receive output tensor (predictions) and new hidden and cell states
-            output, hidden, cell = self.decoder(input, hidden, cell)
+            output_intent, output_emotion_softmax, hidden, cell = self.decoder(input, hidden, cell)
             
             # print("predicted decoder output size: ", output.size())
             #place predictions in a tensor holding predictions for each token
+            output_intent = (torch.sigmoid(output_intent) >= 0.5).float()
+
+            output_emotion_idx = torch.argmax(output_emotion_softmax, dim=1)
+            print('output emotion index',output_emotion_idx)
+            # print('output emotion softmax',output_emotion_softmax)
+            i=0
+            for emo_idx in output_emotion_idx:
+              output_emotion[i][emo_idx] = 1.0
+              i+=1
+
+            output = torch.cat((output_intent, output_emotion),1)
+            print('output intent size', output_intent.size())
+            print('output emotion size', output_emotion.size())
+            print('concatenated output size',output.size())
             outputs[t] = output
             
             #decide if we are going to use teacher forcing or not
@@ -159,8 +180,8 @@ class Seq2Seq(nn.Module):
             
             # print('predicted output size:', output.size())
             #get the highest predicted token from our predictions
-            top1 =  (torch.sigmoid(output) >= 5).float()
-
+            top1 =  output
+            print('decoder prediction:', top1)
             # print('post sigmoid activation and thresholding, prediction output size:', top1.size())
             
             #if teacher forcing, use actual next token as next input
