@@ -136,7 +136,7 @@ class Seq2Seq(nn.Module):
         
         #tensor to store decoder outputs
         outputs = torch.zeros(trg_len, batch_size, trg_vocab_size).to(self.device)
-        print("output predictions stored array size", outputs.size())
+        # print("output predictions stored array size", outputs.size())
         
         # for i in range(input_length):
         #    encoder_hidden, encoder_cell = self.encoder(src[i])
@@ -162,7 +162,7 @@ class Seq2Seq(nn.Module):
             output_intent = (torch.sigmoid(output_intent) >= 0.5).float()
 
             output_emotion_idx = torch.argmax(output_emotion_softmax, dim=1)
-            print('output emotion index',output_emotion_idx)
+            # print('output emotion index',output_emotion_idx)
             # print('output emotion softmax',output_emotion_softmax)
             i=0
             for emo_idx in output_emotion_idx:
@@ -170,9 +170,9 @@ class Seq2Seq(nn.Module):
               i+=1
 
             output = torch.cat((output_intent, output_emotion),1)
-            print('output intent size', output_intent.size())
-            print('output emotion size', output_emotion.size())
-            print('concatenated output size',output.size())
+            # print('output intent size', output_intent.size())
+            # print('output emotion size', output_emotion.size())
+            # print('concatenated output size',output.size())
             outputs[t] = output
             
             #decide if we are going to use teacher forcing or not
@@ -181,7 +181,7 @@ class Seq2Seq(nn.Module):
             # print('predicted output size:', output.size())
             #get the highest predicted token from our predictions
             top1 =  output
-            print('decoder prediction:', top1)
+            # print('decoder prediction:', top1)
             # print('post sigmoid activation and thresholding, prediction output size:', top1.size())
             
             #if teacher forcing, use actual next token as next input
