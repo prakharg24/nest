@@ -54,20 +54,20 @@ fname_valid = '../bertclassifier/data/casino/casino_valid.json'
 ## create dataloaders for train, val, test
 
 #Train
-# src_train, trg_train = get_src_trg_by_fname(fname_train)
-# training_data = dataLoaderClass(src_train, trg_train)
+src_train, trg_train = get_src_trg_by_fname(fname_train)
+training_data = dataLoaderClass(src_train, trg_train)
 # # print('src train shape: ', src_train.shape)
-# train_iterator = DataLoader(training_data, batch_size=32, shuffle=True)
+train_iterator = DataLoader(training_data, batch_size=32, shuffle=True)
 # print('Loaded training data')
 
 #Test
-# src_test, trg_test = get_src_trg_by_fname(fname_test)
-# test_data = dataLoaderClass(src_test, trg_test)
+src_test, trg_test = get_src_trg_by_fname(fname_test)
+test_data = dataLoaderClass(src_test, trg_test)
 # # print('src test shape: ', src_test.shape)
-# test_iterator = DataLoader(test_data, batch_size=10, shuffle=True)
-# print('Loaded test data')
-# print('src test sample 1:', src_test[0][0])
-# print('trg test sample 1:', trg_test[0][0])
+test_iterator = DataLoader(test_data, batch_size=10, shuffle=True)
+print('Loaded test data')
+print('src test sample 1:', src_test[0][0])
+print('trg test sample 1:', trg_test[0][0])
 
 #Valid
 src_valid, trg_valid = get_src_trg_by_fname(fname_valid)
@@ -98,6 +98,7 @@ def train(model, iterator, optimizer, criterion, clip):
     
     for i, batch in enumerate(iterator):
         
+        # print('batch iteration:', i)
         #print('Batch: ', batch)
         # before permute function, src.size(), trg.size() --> (batch_size, dialogue_length, ohv_size)
         # after permute function, src.size(), trg.size() --> (dialogue_length, batch_size, ohv_size)
@@ -128,6 +129,7 @@ def train(model, iterator, optimizer, criterion, clip):
         #output = [(trg len - 1) * batch size, output dim]
         
         loss = criterion(output, trg)
+        loss.requires_grad = True
         
         loss.backward()
         
@@ -171,7 +173,7 @@ def evaluate(model, iterator, criterion):
             #output = [(trg len - 1) * batch size, output dim]
 
             loss = criterion(output, trg)
-            loss = Variable(loss, requires_grad = True)
+            
             
             epoch_loss += loss.item()
 
@@ -180,10 +182,10 @@ def evaluate(model, iterator, criterion):
 
     fin_targets = (np.array(fin_targets)).astype(np.bool).tolist()
     fin_outputs = (np.array(fin_outputs)).astype(np.bool).tolist()
-    print("fin_target size:", np.array(fin_targets).shape)
-    print("first target intent:", fin_targets[0])
-    print("fin_output size:", np.array(fin_outputs).shape)
-    print("first predicted intent:", fin_outputs[0])
+    # print("fin_target size:", np.array(fin_targets).shape)
+    # print("first target intent:", fin_targets[0])
+    # print("fin_output size:", np.array(fin_outputs).shape)
+    # print("first predicted intent:", fin_outputs[0])
     accuracy = accuracy_score(fin_targets, fin_outputs)
     f1_score_micro = f1_score(fin_targets, fin_outputs, average='micro')
     f1_score_macro = f1_score(fin_targets, fin_outputs, average='macro')
@@ -227,9 +229,9 @@ for epoch in range(N_EPOCHS):
     
     start_time = time.time()
     
-    # train_loss = train(model, train_iterator, optimizer, criterion, CLIP)
-    train_loss = train(model, valid_iterator, optimizer, criterion, CLIP)
-    # print('train loss:',train_loss)
+    train_loss = train(model, train_iterator, optimizer, criterion, CLIP)
+    # train_loss = train(model, valid_iterator, optimizer, criterion, CLIP)
+    print('train loss:',train_loss)
     valid_loss, accuracy, f1_score_micro, f1_score_macro = evaluate(model, valid_iterator, criterion)
     
     end_time = time.time()
