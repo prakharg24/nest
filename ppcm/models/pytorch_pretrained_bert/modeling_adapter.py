@@ -1,4 +1,4 @@
-# coding=utf-8
+# task_mask# coding=utf-8
 # Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -278,41 +278,51 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
         self.adapter_block = MixAdapter(config)
 
-    def forward(self, x, layer_past=None, task_id=-1):
+    def forward(self, x, layer_past=None, task_mask=-1):
         a, present = self.attn(self.ln_1(x), layer_past=layer_past)
         x = x + a
         m = self.mlp(self.ln_2(x))
         x = x + m
-        x = self.adapter_block(x,task_id)
+        x = self.adapter_block(x,task_mask)
         return x, present
 
 class Adapter(nn.Module):
-    def __init__(self, config, bottleneck):
+    def __init__(self, config, bottleneck, adapter_num):
         super(Adapter, self).__init__()
         nx = config.n_embd
+        self.nx = nx
+        self.adapter_num = adapter_num
         self.ln = LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.project_down = nn.Linear(nx, bottleneck)
+        # self.project_down = nn.Linear(nx, bottleneck)
+        self.project_down = nn.ModuleList([nn.Linear(nx, bottleneck) for _ in range(adapter_num)])
         self.relu = nn.ReLU()
-        self.project_up = nn.Linear(bottleneck, nx)
-    def forward(self, x):
+        # self.project_up = nn.Linear(bottleneck, nx)
+        self.project_up = nn.ModuleList([nn.Linear(bottleneck, nx//adapter_num) for _ in range(adapter_num)])
+    def forward(self, x, task_mask):
         x_ = self.ln(x)
-        x_ = self.project_down(x_)
-        x_ = self.relu(x_)
-        x_ = self.project_up(x_)
-        x  = x + x_ #residual connection
+        x_arr = []
+        for i in range(self.adapter_num):
+            x_temp = x_[..., (i*self.nx//self.adapter_num):((i+1)*self.nx//self.adapter_num)]
+            if task_mask==1:
+                x_temp = self.project_down[i][x_]
+                x_temp = self.relu(x_temp)
+                x_temp = self.project_up[i](x_temp)
+            x_arr.append(x_temp)
+
+        x_ = torch.cat(x_arr, dim=-1)
+        x = x + x_
+        # x  = x*(1 - task_mask) + x_*task_mask #residual connection
         return x
 
 class MixAdapter(nn.Module):
-    def __init__(self, config, bottleneck_size=100, adapter_num=20):
+    def __init__(self, config, bottleneck_size=100, adapter_num=16):
         super(MixAdapter, self).__init__()
-        # 20 adapters with task_id 0--20, when task_id==-1 means dont use adapter
-        self.mixadapter = nn.ModuleList([Adapter(config, bottleneck_size) for _ in range(adapter_num)])
-        
-    def forward(self, x, task_id=-1):
-        if task_id==-1:
-            return x
-        else:
-            return self.mixadapter[task_id](x)
+        # 20 adapters with task_mask 0--20, when task_mask==-1 means dont use adapter
+        # self.mixadapter = nn.ModuleList([Adapter(config, bottleneck_size) for _ in range(adapter_num)])
+        self.mixadapter = Adapter(config, bottleneck_size, adapter_num)
+
+    def forward(self, x, task_mask=-1):
+        return self.mixadapter(x, task_mask)
 
 
 class GPT2LMHead(nn.Module):
@@ -560,7 +570,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.apply(self.init_weights)
 
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, past=None, task_id=-1):
+    def forward(self, input_ids, position_ids=None, token_type_ids=None, past=None, task_mask=-1):
         # if input_ids.dtype != torch.long:
         #     input_ids = input_ids.long()
 
@@ -612,7 +622,7 @@ class GPT2Model(GPT2PreTrainedModel):
             #     exit()
 
 
-            hidden_states, present = block(hidden_states, layer_past, task_id)
+            hidden_states, present = block(hidden_states, layer_past, task_mask)
             hiddens.append(hidden_states)
             presents.append(present)
         hidden_states = self.ln_f(hidden_states)
@@ -748,26 +758,26 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     ```
     """
 
-    def __init__(self, config, default_task_id=-1):
+    def __init__(self, config, default_task_mask=-1):
         super(GPT2LMHeadModel, self).__init__(config)
         self.transformer = GPT2Model(config)
         self.lm_head = GPT2LMHead(self.transformer.wte.weight, config)
         self.apply(self.init_weights)
-        self.default_task_id = default_task_id
+        self.default_task_mask = default_task_mask
     def set_tied(self):
         """ Make sure we are sharing the embeddings
         """
         self.lm_head.set_embeddings_weights(self.transformer.wte.weight)
 
-    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None, task_id=-1, kl_weight=0):
-        if task_id==-1: # if didn't specify which adapter should be used, use the default one.
-            task_id=self.default_task_id
-        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, past, task_id)
+    def forward(self, input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None, task_mask=-1, kl_weight=0):
+        if task_mask==-1: # if didn't specify which adapter should be used, use the default one.
+            task_mask=self.default_task_mask
+        hidden_states, presents = self.transformer(input_ids, position_ids, token_type_ids, past, task_mask)
 
         self.hidden_states = hidden_states
         lm_logits = self.lm_head(hidden_states)
         if lm_labels is not None:
-            
+
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[:, :-1].contiguous()
             shift_labels = lm_labels[:, 1:].contiguous()
