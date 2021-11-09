@@ -8,6 +8,8 @@ end = int(sys.argv[2])
 outfile = sys.argv[3]
 fname = 'bertclassifier/data/casino/casino_train.json'
 
+weird_cases = [648, 681]
+
 if not os.path.exists(outfile):
     copyfile(fname, outfile)
 
@@ -17,6 +19,8 @@ data = json.load(open(outfile))
 
 for ind, item in enumerate(data):
     if (ind < start or ind > end):
+        continue
+    if (item['dialogue_id'] in weird_cases):
         continue
     if 'proposals' in item:
         continue
