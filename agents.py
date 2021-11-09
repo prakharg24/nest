@@ -1,7 +1,7 @@
 import copy
 import math
 from task_utils import get_random_emotion, get_random_intent
-from task_utils import get_proposal_score
+from task_utils import get_proposal_score, incomplete_proposal
 
 ### define agents
 class AgentTabular():
@@ -43,8 +43,10 @@ class RandomAgentConsiderate(AgentTabular):
         return proposal
 
     def check_acceptable(self, proposal):
-        score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
+        if incomplete_proposal(proposal):
+            return False
         score_if_accept = get_proposal_score(self.priorities, proposal, self.score_weightage)
+        score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
 
         if (score_if_accept >= score_current):
             return True
@@ -53,13 +55,13 @@ class RandomAgentConsiderate(AgentTabular):
 
     def adjust_proposal(self, proposal):
         for ele in self.proposal_float:
-            if (self.proposal_float[ele] > proposal[ele]):
-                self.proposal_float[ele] = 0.8*self.proposal_float[ele] + 0.2*proposal[ele]
+            if (self.proposal_float[ele] > proposal[ele] and proposal[ele]!=-1):
+                self.proposal_float[ele] = self.proposal_float[ele] - 0.2
 
         for ele in self.proposal_float:
             self.proposal[ele] = math.ceil(self.proposal_float[ele])
 
-        return self.proposal
+        return copy.deepcopy(self.proposal)
 
     def step(self, input_emotion, input_intent, input_proposal):
         is_acceptable = self.check_acceptable(input_proposal)
@@ -94,8 +96,10 @@ class RandomAgentStubborn(AgentTabular):
         return proposal
 
     def check_acceptable(self, proposal):
-        score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
+        if incomplete_proposal(proposal):
+            return False
         score_if_accept = get_proposal_score(self.priorities, proposal, self.score_weightage)
+        score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
 
         if (score_if_accept >= score_current):
             return True
@@ -111,6 +115,6 @@ class RandomAgentStubborn(AgentTabular):
         if is_acceptable:
             out_proposal = input_proposal
         else:
-            out_proposal = self.proposal
+            out_proposal = copy.deepcopy(self.proposal)
 
         return out_emotion, out_intent, out_proposal, is_acceptable

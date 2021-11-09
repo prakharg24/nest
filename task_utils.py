@@ -9,6 +9,18 @@ def get_proposal_score(priorities, proposal, score_weightage):
 
     return final_score
 
+def incomplete_proposal(proposal):
+    for ele in proposal:
+        if proposal[ele]==-1:
+            return True
+    return False
+
+def switch_proposal_perspective(proposal):
+    for ele in proposal:
+        if (proposal[ele]!=-1):
+            proposal[ele] = 3 - proposal[ele]
+    return proposal
+
 def get_random_emotion():
     return random.randint(0, 5)
 
