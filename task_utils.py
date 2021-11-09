@@ -19,6 +19,8 @@ class NegotiationStarter():
     def __init__(self, datafile):
         self.parser = Parser(debug_mode=True)
         full_conversations = self.load_dialogues_json(datafile)
+        print(len(full_conversations))
+        exit()
         self.conversations = []
         for ele in full_conversations:
             prefix_ele = self.cut_conversation_prefix(ele)

@@ -2,9 +2,6 @@ import random
 from agents import RandomAgentConsiderate, RandomAgentStubborn
 from task_utils import NegotiationStarter
 
-print("Import Done")
-exit()
-
 ### Initialize Meta Data Regarding the Negotiations
 elements_to_divide = ["Firewood", "Water", "Food"]
 priorities = ["low", "medium", "high"]
@@ -13,6 +10,8 @@ length_penalty = 0.5
 
 num_rounds = 10
 starter = NegotiationStarter(datafile='prakhar_labels.json')
+
+exit()
 
 ### Initialize and Collect all agents to take part in the negotiations
 agent1 = RandomAgentConsiderate(score_weightage, length_penalty, 0)
