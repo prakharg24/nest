@@ -15,18 +15,20 @@ def get_random_emotion():
 def get_random_intent():
     return [random.randint(0, 1) for _ in range(10)]
 
+def get_chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
 class NegotiationStarter():
     def __init__(self, datafile):
         self.parser = Parser(debug_mode=True)
         full_conversations = self.load_dialogues_json(datafile)
-        print(len(full_conversations))
-        exit()
         self.conversations = []
         for ele in full_conversations:
-            prefix_ele = self.cut_conversation_prefix(ele)
-            if prefix_ele is not None:
-                self.conversations.append(prefix_ele)
-
+            prefix_conv = self.cut_conversation_prefix(ele[0])
+            if prefix_conv is not None:
+                self.conversations.append((prefix_conv, ele[1]))
 
     def load_dialogues_json(self, fname):
         conversations = []
@@ -40,6 +42,7 @@ class NegotiationStarter():
             dialogues = []
             proposal_dict = self.local_proposal_dict(item['proposals'])
             complete_log = item['chat_logs']
+            participant_info = item['participant_info']
             for i, utterance in enumerate(complete_log):
                 ## Assumption, the dialogue loader will never account for markers like submit-deal, reject-deal, accept-deal etc.
                 if utterance['text'] in extra_utterances:
@@ -54,7 +57,7 @@ class NegotiationStarter():
                                   'proposal': proposal_data})
 
             if len(dialogues) > 5:
-                conversations.append(dialogues)
+                conversations.append((dialogues, participant_info))
 
         return conversations
 
@@ -78,20 +81,19 @@ class NegotiationStarter():
         elif end_index < 2:
             return conversation[:2]
         else:
-            return conversation[:end_index]
+            return conversation[:(end_index+1)]
 
-    def get_all_agents(self, conversation):
-        agent_counter = 0
+    def get_all_agents_and_priorities(self, conversation):
         agent_dict = {}
-        for ele in conversation:
+        for ele in conversation[0]:
             if ele['speaker_id'] not in agent_dict:
-                agent_dict[ele['speaker_id']] = agent_counter
-                agent_counter += 1
+                participant_info = conversation[1][ele['speaker_id']]['value2issue']
+                agent_dict[ele['speaker_id']] = {participant_info[k]:k for k in participant_info}
 
         return agent_dict
 
-    def get_random_negotiation_prefix():
+    def get_random_negotiation_prefix(self):
         conversation = random.choice(self.conversations)
-        agents = self.get_all_agents(conversation)
+        agents = self.get_all_agents_and_priorities(conversation)
 
-        return conversation, agents
+        return conversation[0], agents

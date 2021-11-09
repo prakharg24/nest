@@ -25,17 +25,20 @@ class AgentTabular():
 class RandomAgentConsiderate(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
+
+    def set_priority_and_proposal(self, priorities):
+        self.set_priority(priorities)
         self.proposal = self.set_initial_proposal()
         self.proposal_float = copy.deepcopy(self.proposal)
 
     def set_initial_proposal(self):
         proposal = {}
         for ele in self.priorities:
-            if self.priorities[ele]=="high":
+            if self.priorities[ele]=="High":
                 proposal[ele] = 3
-            elif self.priorities[ele]=="medium":
+            elif self.priorities[ele]=="Medium":
                 proposal[ele] = 2
-            elif self.priorities[ele]=="low":
+            elif self.priorities[ele]=="Low":
                 proposal[ele] = 1
         return proposal
 
@@ -74,16 +77,19 @@ class RandomAgentConsiderate(AgentTabular):
 class RandomAgentStubborn(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
+
+    def set_priority_and_proposal(self, priorities):
+        self.set_priority(priorities)
         self.proposal = self.set_initial_proposal()
 
     def set_initial_proposal(self):
         proposal = {}
         for ele in self.priorities:
-            if self.priorities[ele]=="high":
+            if self.priorities[ele]=="High":
                 proposal[ele] = 3
-            elif self.priorities[ele]=="medium":
+            elif self.priorities[ele]=="Medium":
                 proposal[ele] = 2
-            elif self.priorities[ele]=="low":
+            elif self.priorities[ele]=="Low":
                 proposal[ele] = 1
         return proposal
 

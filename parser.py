@@ -4,14 +4,15 @@ class Parser():
     def __init__(self, max_len=256, debug_mode=False):
         # super(Parser, self).__init__()
         self.max_len = max_len
-        if not debug_mode:
+        self.debug_mode = debug_mode
+        if not self.debug_mode:
             self.load_models()
 
     def load_models(self):
         initialize_models()
 
     def parse(self, utterance):
-        if not debug_mode:
+        if not self.debug_mode:
             emotion_label, emotion_index, emotion_logits = get_emotion_label(utterance)
             intent_labels, intent_indices, intent_logits = get_intent_label(utterance)
 
@@ -20,4 +21,4 @@ class Parser():
 
             return {'emotion': emotion_dict, 'intent': intent_dict}
         else:
-            raise Exception("Parser does not do predictions in debug mode")
+            return {'emotion': None, 'intent': None}
