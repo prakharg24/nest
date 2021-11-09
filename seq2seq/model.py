@@ -5,6 +5,7 @@ import numpy as np
 import random
 import math
 import time
+import torch.nn.functional as F
 
 # SEED = 1234
 
@@ -26,31 +27,21 @@ class Encoder(nn.Module):
         # self.embedding = nn.Embedding(input_dim, emb_dim)
         
         self.rnn = nn.LSTM(emb_dim, hid_dim, n_layers, dropout = dropout)
+        self.gru = nn.GRU(emb_dim, hid_dim, n_layers,
+                          dropout=dropout, bidirectional=True)
         
         self.dropout = nn.Dropout(dropout)
         
-    def forward(self, src):
+    def forward(self, src, hidden= None):
         
-        #src = [src len, batch size, ohv_len] --> dimension
+        # outputs, (hidden, cell) = self.rnn(src) # pass input directly to lstm 
+        outputs, hidden = self.gru(src, hidden)
+        # sum bidirectional outputs
+        outputs = (outputs[:, :, :self.hid_dim] +
+                   outputs[:, :, self.hid_dim:])
         
-        # if embedding layer is added:
-        # embedded = self.dropout(self.embedding(src))
-        # print('embedded size', embedded.size())
-        # outputs, (hidden, cell) = self.rnn(embedded)
-    
-        #embedded = [src len, batch size, emb dim] --> dimension
-        
-        
-        outputs, (hidden, cell) = self.rnn(src) # pass input directly to lstm 
-        
-        
-        #outputs = [src len, batch size, hid dim * n directions]  --> dimension
-        #hidden = [n layers * n directions, batch size, hid dim]  --> dimension
-        #cell = [n layers * n directions, batch size, hid dim]  --> dimension
-        
-        #outputs are always from the top hidden layer
-        
-        return hidden, cell
+        # return hidden, cell
+        return outputs, hidden
 
 class Decoder(nn.Module):
     def __init__(self, output_dim, emb_dim, hid_dim, n_layers, dropout):
@@ -62,45 +53,73 @@ class Decoder(nn.Module):
         
         # self.embedding = nn.Embedding(output_dim, emb_dim)
         
-        self.rnn = nn.LSTM(emb_dim, hid_dim, n_layers, dropout = dropout)
+        # self.rnn = nn.LSTM(emb_dim, hid_dim, n_layers, dropout = dropout)
+        self.attention = Attention(hid_dim)
+        self.gru = nn.GRU(hid_dim + emb_dim, hid_dim,
+                          n_layers, dropout=dropout)
         
         # separate classifiers for intent and emotion
-        self.fc_out_intent = nn.Linear(hid_dim, 10)
-        self.fc_out_emotion = nn.Linear(hid_dim, 6)
+        self.fc_out_intent = nn.Linear(hid_dim * 2, 10)
+        self.fc_out_emotion = nn.Linear(hid_dim * 2, 6)
         
         self.dropout = nn.Dropout(dropout)
         
         
-    def forward(self, input, hidden, cell):
+    def forward(self, input, last_hidden, encoder_outputs):
         
-        #input = [batch size, ohv_len]  --> dimension
-        #hidden = [n layers * n directions, batch size, hid dim]  --> dimension
-        #cell = [n layers * n directions, batch size, hid dim]  --> dimension
-        
-        #n directions in the decoder will both always be 1, therefore:
-        #hidden = [n layers, batch size, hid dim]
-        #context = [n layers, batch size, hid dim]
         
         input = input.unsqueeze(0)
         #input = [1, batch size]  --> dimension
         
-        # embedded = self.dropout(self.embedding(input))
-        # print("embedding decoder size", embedded.size())
-        # output, (hidden, cell) = self.rnn(embedded, (hidden, cell))
+        # output, (hidden, cell) = self.rnn(input, (hidden, cell)) # pass input directly to lstm
         
-        #embedded = [1, batch size, emb dim] --> dimension
-                
-        
-        output, (hidden, cell) = self.rnn(input, (hidden, cell)) # pass input directly to lstm
-        
+        # Calculate attention weights and apply to encoder outputs
+        attn_weights = self.attention(last_hidden[-1], encoder_outputs)
+        context = attn_weights.bmm(encoder_outputs.transpose(0, 1))  # (B,1,N)
+        context = context.transpose(0, 1)  # (1,B,N)
+        # Combine embedded input word and attended context, run through RNN
+        rnn_input = torch.cat([input, context], 2)
+        output, hidden = self.gru(rnn_input, last_hidden)
+        output = output.squeeze(0)  # (1,B,N) -> (B,N)
+        context = context.squeeze(0)
+        dec_output = torch.cat([output, context], 1)
+
         # Pass decoded outputs through both classifiers
-        intent_prediction = self.fc_out_intent(output.squeeze(0))
-        linearEmotion =self.fc_out_emotion(output.squeeze(0))
+        intent_prediction = self.fc_out_intent(dec_output)
+        linearEmotion =self.fc_out_emotion(dec_output)
+        
+        # intent_prediction = self.fc_out_intent(output.squeeze(0))
+        # linearEmotion =self.fc_out_emotion(output.squeeze(0))
         
         #prediction = [batch size, output dim]  --> dimension
 
         # return linear classifier outputs for intent and emotion along with decoder hidden state and memory cell
-        return intent_prediction, linearEmotion, hidden, cell
+        # return intent_prediction, linearEmotion, hidden, cell
+        return intent_prediction, linearEmotion, hidden, attn_weights
+
+class Attention(nn.Module):
+    def __init__(self, hid_dim):
+        super(Attention, self).__init__()
+        self.hidden_size = hid_dim
+        self.attn = nn.Linear(self.hidden_size * 2, hid_dim)
+        self.v = nn.Parameter(torch.rand(hid_dim))
+        stdv = 1. / math.sqrt(self.v.size(0))
+        self.v.data.uniform_(-stdv, stdv)
+
+    def forward(self, hidden, encoder_outputs):
+        timestep = encoder_outputs.size(0)
+        h = hidden.repeat(timestep, 1, 1).transpose(0, 1)
+        encoder_outputs = encoder_outputs.transpose(0, 1)  # [B*T*H]
+        attn_energies = self.score(h, encoder_outputs)
+        return F.softmax(attn_energies, dim=1).unsqueeze(1)
+
+    def score(self, hidden, encoder_outputs):
+        # [B*T*2H]->[B*T*H]
+        energy = F.relu(self.attn(torch.cat([hidden, encoder_outputs], 2)))
+        energy = energy.transpose(1, 2)  # [B*H*T]
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)  # [B*1*H]
+        energy = torch.bmm(v, energy)  # [B*1*T]
+        return energy.squeeze(1)  # [B*T]
 
 class Seq2Seq(nn.Module):
     def __init__(self, encoder, decoder, device):
@@ -132,7 +151,9 @@ class Seq2Seq(nn.Module):
         outputs_predictions = torch.zeros(trg_len, batch_size, trg_vocab_size).to(self.device) # to store processed predicted one hot vectors
 
         #last hidden state of the encoder is used as the initial hidden state of the decoder
-        hidden, cell = self.encoder(src)
+        # hidden, cell = self.encoder(src)
+        encoder_output, hidden = self.encoder(src)
+        hidden = hidden[:self.decoder.n_layers]
         
         #first input to the decoder is the farst target utterance label vector
         input = trg[0,:]
@@ -144,7 +165,7 @@ class Seq2Seq(nn.Module):
             
             #insert input token embedding, previous hidden and previous cell states
             #receive output tensor (linear predictions) and new hidden and cell states
-            output_intent, linearEmotion, hidden, cell = self.decoder(input, hidden, cell)
+            output_intent, linearEmotion, hidden, attn_weights = self.decoder(input, hidden, encoder_output)
             
             
             # compute predicted intent label from linear intent output

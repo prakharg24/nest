@@ -1,8 +1,9 @@
-from bertclassifier.inference import get_emotion_label, get_intent_label
+from bertclassifier.inference import get_emotion_label, get_intent_label, initialize_models
 import json
 import numpy as np
 
 label_to_index = {'elicit-pref':0, 'no-need':1, 'uv-part':2, 'other-need':3, 'showing-empathy':4, 'vouch-fair':5, 'small-talk':6, 'self-need':7, 'promote-coordination':8, 'non-strategic':9, "sadness": 10, "joy": 11, "anger":12, "fear":13, "surprise":14, "love":15}
+initialize_models()
 
 def parse(utterance):
         emotion_label, emotion_index, emotion_logits = get_emotion_label(utterance)
@@ -13,6 +14,10 @@ def parse(utterance):
 
         return {'emotion': emotion_dict, 'intent': intent_dict}
 
+def load_model(file_name):
+    """Reads model from a file."""
+    with open(file_name, 'rb') as f:
+        return torch.load(f)
 
 def make_anno_dict(anno_arr):
     outdict = {}
@@ -40,12 +45,12 @@ def get_dialogs_from_json(fname):
         annotations = make_anno_dict(item['annotations'])
 
         for i, utterance in enumerate(complete_log):
-            if utterance['text'] in extra_utterances:
-                continue
-            elif utterance['text'] in annotations:
-                agent_id = utterance['id']
-                X.append({'text':utterance['text'],'agent_id':agent_id})
-                num_of_utterances+=1
+            # if utterance['text'] in extra_utterances:
+            #     continue
+            # elif utterance['text'] in annotations:
+            agent_id = utterance['id']
+            X.append({'text':utterance['text'],'agent_id':agent_id})
+            num_of_utterances+=1
         if num_of_utterances > max_length:
           max_length = num_of_utterances
         if len(X) != 0:  
