@@ -1,9 +1,9 @@
 import random
-from agents import RandomAgentConsiderate, RandomAgentStubborn
+from agents.agents import RandomAgentConsiderate, RandomAgentStubborn
 from task_utils import NegotiationStarter
 from task_utils import get_chunks, switch_proposal_perspective, get_proposal_score
 
-random.seed(42)
+random.seed(32)
 
 ### Initialize Meta Data Regarding the Negotiations
 elements_to_divide = ["Firewood", "Water", "Food"]

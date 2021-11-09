@@ -36,6 +36,7 @@ tokenizer = None
 
 def initialize_models():
     global model_intent, model_emotion, tokenizer
+    print("Loading Parser Models")
 
     model_intent = BERTMultiLabel(num_labels=10).to(device)
     model_intent.load_state_dict(torch.load(model_file_intent))
