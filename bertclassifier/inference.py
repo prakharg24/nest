@@ -20,6 +20,8 @@ class BERTMultiLabel(torch.nn.Module):
 # Set the maximum sequence length. The longest sequence in our training set is 47, but we'll leave room on the end anyway.
 # In the original paper, the authors used a length of 512.
 MAX_LEN = 256
+label_emotion = {4: "sadness", 2: "joy", 0: "anger", 1: "fear", 5: "surprise", 3: "love"}
+label_intent = ['elicit-pref', 'no-need', 'uv-part', 'other-need', 'showing-empathy', 'vouch-fair', 'small-talk', 'self-need', 'promote-coordination', 'non-strategic']
 
 curr_dir = os.path.dirname(__file__)
 
@@ -28,18 +30,22 @@ model_file_emotion = os.path.join(curr_dir, 'models/emotion_classifier.pt')
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model_intent = BERTMultiLabel(num_labels=10).to(device)
-model_intent.load_state_dict(torch.load(model_file_intent))
-model_intent.eval()
+model_intent = None
+model_emotion = None
+tokenizer = None
 
-model_emotion = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=6).to(device)
-model_emotion.load_state_dict(torch.load(model_file_emotion))
-model_emotion.eval()
+def initialize_models():
+    global model_intent, model_emotion, tokenizer
 
-label_emotion = {4: "sadness", 2: "joy", 0: "anger", 1: "fear", 5: "surprise", 3: "love"}
-label_intent = ['elicit-pref', 'no-need', 'uv-part', 'other-need', 'showing-empathy', 'vouch-fair', 'small-talk', 'self-need', 'promote-coordination', 'non-strategic']
+    model_intent = BERTMultiLabel(num_labels=10).to(device)
+    model_intent.load_state_dict(torch.load(model_file_intent))
+    model_intent.eval()
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased',do_lower_case=True)
+    model_emotion = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=6).to(device)
+    model_emotion.load_state_dict(torch.load(model_file_emotion))
+    model_emotion.eval()
+
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased',do_lower_case=True)
 
 def get_emotion_label(utterance):
     input_ids_t = torch.tensor(tokenizer.encode(utterance,add_special_tokens=True,max_length=MAX_LEN,truncation=True,padding='max_length')).unsqueeze(0)
@@ -61,3 +67,9 @@ def get_intent_label(utterance):
     labels = [label_intent[e] for e in pred]
 
     return labels, pred, intent
+
+if __name__ == "__main__":
+    test_sentence = "Hi! I am so excited for tomorrow's trip."
+    initialize_models()
+    pred = get_emotion_label(test_sentence)
+    print(pred)

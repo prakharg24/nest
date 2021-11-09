@@ -28,7 +28,7 @@ class RandomAgentConsiderate(AgentTabular):
         self.proposal = self.set_initial_proposal()
         self.proposal_float = copy.deepcopy(self.proposal)
 
-    def set_initial_proposal():
+    def set_initial_proposal(self):
         proposal = {}
         for ele in self.priorities:
             if self.priorities[ele]=="high":
@@ -39,7 +39,7 @@ class RandomAgentConsiderate(AgentTabular):
                 proposal[ele] = 1
         return proposal
 
-    def check_acceptable(proposal):
+    def check_acceptable(self, proposal):
         score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
         score_if_accept = get_proposal_score(self.priorities, proposal, self.score_weightage)
 
@@ -48,7 +48,7 @@ class RandomAgentConsiderate(AgentTabular):
         else:
             return False
 
-    def adjust_proposal(proposal):
+    def adjust_proposal(self, proposal):
         for ele in self.proposal_float:
             if (self.proposal_float[ele] > proposal[ele]):
                 self.proposal_float[ele] = 0.8*self.proposal_float[ele] + 0.2*proposal[ele]
@@ -76,7 +76,7 @@ class RandomAgentStubborn(AgentTabular):
         super().__init__(score_weightage, length_penalty, id)
         self.proposal = self.set_initial_proposal()
 
-    def set_initial_proposal():
+    def set_initial_proposal(self):
         proposal = {}
         for ele in self.priorities:
             if self.priorities[ele]=="high":
@@ -87,7 +87,7 @@ class RandomAgentStubborn(AgentTabular):
                 proposal[ele] = 1
         return proposal
 
-    def check_acceptable(proposal):
+    def check_acceptable(self, proposal):
         score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
         score_if_accept = get_proposal_score(self.priorities, proposal, self.score_weightage)
 

@@ -2,6 +2,9 @@ import random
 from agents import RandomAgentConsiderate, RandomAgentStubborn
 from task_utils import NegotiationStarter
 
+print("Import Done")
+exit()
+
 ### Initialize Meta Data Regarding the Negotiations
 elements_to_divide = ["Firewood", "Water", "Food"]
 priorities = ["low", "medium", "high"]
@@ -29,14 +32,15 @@ for round in num_rounds:
         a2.set_priority({e:p for e, p in zip(elements_to_divide, priorities)})
 
         ### get some negotiation starting point
-        neg_prefix = starter.get_random_negotiation_prefix()
+        neg_prefix, agent_dict = starter.get_random_negotiation_prefix()
 
         agent_tuple = [a1, a2]
+        agent_dict = {k: v.id for k, v in zip(agent_dict, agent_tuple)}
 
         act_ag = 0
         for ele in neg_prefix:
-            a1.step_passive(, agent_tuple[act_ag].id)
-            a2.step_passive(, agent_tuple[act_ag].id)
+            a1.step_passive(ele['emotion'], ele['intent'], ele['proposal'], agent_tuple[act_ag].id)
+            a2.step_passive(ele['emotion'], ele['intent'], ele['proposal'], agent_tuple[act_ag].id)
             act_ag = (act_ag+1)%2
 
         end_deal = False
