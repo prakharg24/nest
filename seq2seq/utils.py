@@ -23,6 +23,7 @@ def make_anno_dict(anno_arr):
     return outdict
 
 def get_dialogs_from_json(fname):
+    # Returns dialogue utterances with agent ids and the maximum dialogue length for the file 
     print('Loading dialogues from file')
     extra_utterances = ['Submit-Deal', 'Accept-Deal', 'Reject-Deal', 'Walk-Away', 'Submit-Post-Survey']
     annotation_list = ['elicit-pref', 'no-need', 'uv-part', 'other-need', 'showing-empathy', 'vouch-fair', 'small-talk', 'self-need', 'promote-coordination', 'non-strategic']
@@ -42,15 +43,18 @@ def get_dialogs_from_json(fname):
             if utterance['text'] in extra_utterances:
                 continue
             elif utterance['text'] in annotations:
-                X.append((utterance['text']))
+                agent_id = utterance['id']
+                X.append({'text':utterance['text'],'agent_id':agent_id})
                 num_of_utterances+=1
         if num_of_utterances > max_length:
-          max_length = num_of_utterances  
-        dialogue_utterances[ item['dialogue_id'] ] = X
+          max_length = num_of_utterances
+        if len(X) != 0:  
+          dialogue_utterances[ item['dialogue_id'] ] = X
 
     return dialogue_utterances, max_length
 
 def get_one_hot_encoding(utterance_labels):
+  # Returns one hot encoded vectors for the labels
   ohv = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
   for label in utterance_labels:
     if type(label['label']) is str:
@@ -61,34 +65,66 @@ def get_one_hot_encoding(utterance_labels):
   return ohv
 
 def get_src_trg_by_fname(fname):
+  # Returns source and target dialogue sequences
+  # source sequences --> starting agent's utterance labels
+  # target sequences --> other agent's utterance labels
+
   dialogue_utterances, max_dialogue_length = get_dialogs_from_json(fname)
   ohv_pad = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
   print('Creating one hot representation of labels')
-  src = []
-  trg = []
-  for dialogue_id, utterances in dialogue_utterances.items():
+  src = [] # source label sequences for all dialogues
+  trg = [] # target label sequences for all dialogues
+  for dialogue_id, utterances_with_id in dialogue_utterances.items():
     src_per_dialogue = []
     trg_per_dialogue = []
-    ohv_utterances_in_dialogue = []
-    for utterance in utterances:
-      label = parse(utterance)
+    prev_agent = ""
+    start_agent = ""
+    i=1
+    for utterance_with_agent_id in utterances_with_id:
+      
+      utterance = utterance_with_agent_id['text']
+      agent_id = utterance_with_agent_id['agent_id']
+      
+      if start_agent == "":
+        start_agent = agent_id
+      if agent_id == prev_agent:
+        print('Same agent here!')
+        print('dialogue no: ', dialogue_id)
+        # if previous agent and current agent are the same, combine the previous and current utterances to extract labels
+        label = parse(prev_utterance + utterance)
+      else :
+        label = parse(utterance)
       utterance_labels = []
       utterance_labels.append(label['emotion'])
       utterance_labels.append(label['intent'])
       ohv = get_one_hot_encoding(utterance_labels)
-      ohv_utterances_in_dialogue.append(ohv)
-    if len(ohv_utterances_in_dialogue) < max_dialogue_length:
-      diff = max_dialogue_length - len(ohv_utterances_in_dialogue)
-      for i in range(0, diff):
-        ohv_utterances_in_dialogue.append(ohv_pad)
-    src_per_dialogue = ohv_utterances_in_dialogue
-    trg_per_dialogue = ohv_utterances_in_dialogue[1:]
-    trg_per_dialogue.append( ohv_pad )
+      if agent_id == prev_agent:
+        # if previous agent and current agent are the same, replace previous ohv with updated ohv
+        if agent_id == start_agent:
+          src_per_dialogue[-1] = ohv
+        else:
+          trg_per_dialogue[-1] = ohv
+      else:
+        if agent_id == start_agent:
+          src_per_dialogue.append(ohv)
+        else:
+          trg_per_dialogue.append(ohv)
+      prev_agent = agent_id
+      prev_utterance = utterance
+      i+=1
+
+    src_per_dialogue = np.array(src_per_dialogue)
+    trg_per_dialogue = np.array(trg_per_dialogue)
+    
+    # if sequence lengths of source and target are not equal, pop the last element of the greater length array (i.e. for every source there should be a response) 
+    if src_per_dialogue.shape[0] != trg_per_dialogue.shape[0]:
+      if src_per_dialogue.shape[0] > trg_per_dialogue.shape[0]:
+        src_per_dialogue = np.delete(src_per_dialogue, -1, 0)
+      else:
+        trg_per_dialogue = np.delete(trg_per_dialogue, -1, 0)
+
     src.append(src_per_dialogue)
     trg.append(trg_per_dialogue)
-  src = np.array(src)
-  # src = np.transpose(src, (1, 0, 2))
-  trg = np.array(trg)
-  # trg = np.transpose(trg, (1, 0, 2))
+  
   return src, trg
 
