@@ -72,17 +72,12 @@ def convert_label_to_onehot(input_label_arr, max_lengths):
 def make_data_loader(args, tokenizer, fname):
     response = []
     with jsonlines.open(fname) as reader:
-        for i, obj in enumerate(tqdm(reader)):
+        for i, obj in enumerate(reader):
             text = " ".join(tokenize.sent_tokenize(obj["hyp"]["PPLM"][0][-1]))
-            starter = copy.deepcopy(obj['conversation']['conversation'])
-            score = get_ppl(text, starter)
-            if score>700:
-                continue
             response.append((obj['conversation']['conversation']+[text], obj['labels']))
 
-    print("Dataset Size : %d" % len(response))
     dataset = []
-    for (r, l) in response:
+    for (r, l) in tqdm(response):
         label = convert_label_to_onehot(l, [6, 10])
         seq = build_input_from_segments(args, r[:-1], r[-1], tokenizer)
         seq["labels"] = label
@@ -140,7 +135,7 @@ if __name__ == "__main__":
     print("Starting Training")
     best_loss = 1e10
     # Training function and trainer
-    for epoch in args.n_epochs:
+    for epoch in range(args.n_epochs):
         loss_ttl = 0.
         ttl_batches = 0
         for ite, batch in enumerate(tqdm(train_loader)):

@@ -3,5 +3,6 @@
 bertclassifier/models/
 
 ppcm/models/dialoGPT/
+ppcm/models/adapter/
 ppcm/results/
 ppcm/runs/

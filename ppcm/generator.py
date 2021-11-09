@@ -63,8 +63,8 @@ def evaluate(args, model, enc, classifier_arr, idx2class_arr, multilabel_arr, de
                                                                             multilabel_arr=multilabel_arr,
                                                                             label_arr=label_arr)
 
-            # print(original_sentence)
-            # print(perturb_sentence)
+            print(original_sentence)
+            print(perturb_sentence)
             dgpt_out = {"speaker":"DGPT","text":original_sentence.tolist()}
             pplm_out = {"speaker":"PPLM","text":perturb_sentence.tolist(),"loss":loss}
             hypotesis, acc_pplm, plots_array = scorer(args, pplm_out, classifier_arr, enc, idx2class_arr, label_arr, starter["knowledge"], plot=False, gold=starter["gold"])
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     tokenizer = GPT2Tokenizer.from_pretrained(args.model_path)
 
     if(args.load_check_point_adapter != "None"):
-        model = load_model_recursive(GPT2LMHeadModel(config,default_task_id=args.task_id), args.load_check_point_adapter, args, verbose=True)
+        model = load_model_recursive(GPT2LMHeadModel(config), args.load_check_point_adapter, args, verbose=True)
     else:
         model = load_model(GPT2LMHeadModel(config), args.model_path+f"{args.model_size}_ft.pkl", args, verbose=True)
     model.to(device).eval()

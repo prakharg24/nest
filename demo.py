@@ -70,8 +70,8 @@ while True:
         conv_array.append({'text': output_proposal['proposal_phrase'], 'id': 'agent', 'task_data': output_proposal[task_data]})
         print("Agent : %s" % conv_array[-1]['text'])
         print("Firewood : %d" % conv_array[-1]['task_data']['Firewood'])
-        print("Water : %d" % conv_array[-1]['task_data']['Water'])
         print("Food : %d" % conv_array[-1]['task_data']['Food'])
+        print("Water : %d" % conv_array[-1]['task_data']['Water'])
     else:
         ### Call the generator to produce the output dialogue for the agent
         out_dialogue = dummy_generator(conv_array, output_meta_data)
@@ -96,9 +96,9 @@ while True:
         break
     elif user_inp == 'Submit-Deal':
         firewood = input("Firewood : ")
-        water = input("Water : ")
         food = input("Food : ")
-        conv_array.append({'text': user_inp, 'id': 'human', 'task_data': {'Firewood': int(firewood), 'Water': int(water), 'Food': int(food)}})
+        water = input("Water : ")
+        conv_array.append({'text': user_inp, 'id': 'human', 'task_data': {'Firewood': int(firewood), 'Food': int(food), 'Water': int(water)}})
     elif user_inp == 'Reject-Deal':
         # Ask for any other input text to reason for rejection
         additional_inp = input("Human : ")
