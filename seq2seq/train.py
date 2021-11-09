@@ -75,17 +75,17 @@ fname_valid = '../bertclassifier/data/casino/casino_valid.json'
 
 
 #Train
-src_train, trg_train = get_src_trg_by_fname(fname_train)
-training_data = dataLoaderClass(src_train, trg_train)
-print('src train shape: ', len(src_train))
-train_iterator = DataLoader(training_data, batch_size=1, shuffle=True)
-print('Loaded training data')
+# src_train, trg_train = get_src_trg_by_fname(fname_train)
+# training_data = dataLoaderClass(src_train, trg_train)
+# print('src train shape: ', len(src_train))
+# train_iterator = DataLoader(training_data, batch_size=1, shuffle=True)
+# print('Loaded training data')
 
 #Test
-src_test, trg_test = get_src_trg_by_fname(fname_test)
-test_data = dataLoaderClass(src_test, trg_test)
-test_iterator = DataLoader(test_data, batch_size=1, shuffle=True)
-print('Loaded test data')
+# src_test, trg_test = get_src_trg_by_fname(fname_test)
+# test_data = dataLoaderClass(src_test, trg_test)
+# test_iterator = DataLoader(test_data, batch_size=1, shuffle=True)
+# print('Loaded test data')
 
 
 #Valid
@@ -193,8 +193,24 @@ def evaluate(model, iterator, criterion_intent, criterion_emotion):
 
     fin_targets = (np.array(fin_targets)).astype(np.bool).tolist()
     fin_outputs = (np.array(fin_outputs)).astype(np.bool).tolist()
-    
-    accuracy = accuracy_score(fin_targets, fin_outputs)
+    print('fin output shape',np.array(fin_outputs).shape)
+    print('fin target shape',np.array(fin_outputs).shape)
+    intent_output = fin_outputs[:][0:10]
+    emo_output = fin_outputs[:][10:]
+    emo_op_idx = np.argmax(emo_output, axis=1)
+    intent_target = fin_targets[:][0:10]
+    emo_target = fin_targets[:][10:]
+    emo_trg_idx = np.argmax(emo_target, axis=1)
+    accuracy_emo = accuracy_score(emo_trg_idx, emo_op_idx)
+    print(f"Accuracy Score for emotion = {accuracy_emo}")
+    accuracy_intent = accuracy_score(intent_target, intent_output)
+    print(f"Accuracy Score for intent = {accuracy_intent}")
+    f1_score_intent = f1_score(intent_target, intent_output, average = 'samples')
+    print(f"F1 Score (Intent) = {f1_score_intent}")
+    f1_score_emo = f1_score(emo_trg_idx, emo_op_idx, average = 'micro')
+    print(f"F1 Score (Emotion) = {f1_score_emo}")
+
+    accuracy = accuracy_score(fin_targets,fin_outputs)
     f1_score_micro = f1_score(fin_targets, fin_outputs, average='micro')
     f1_score_macro = f1_score(fin_targets, fin_outputs, average='macro')
         
@@ -237,8 +253,8 @@ for epoch in range(N_EPOCHS):
     
     start_time = time.time()
     
-    train_loss = train(model, train_iterator, optimizer, criterion_intent, criterion_emotion, CLIP)
-    # train_loss = train(model, valid_iterator, optimizer, criterion_intent, criterion_emotion, CLIP)
+    # train_loss = train(model, train_iterator, optimizer, criterion_intent, criterion_emotion, CLIP)
+    train_loss = train(model, valid_iterator, optimizer, criterion_intent, criterion_emotion, CLIP)
     print('train loss:',train_loss)
     valid_loss, accuracy, f1_score_micro, f1_score_macro = evaluate(model, valid_iterator, criterion_intent, criterion_emotion)
     
@@ -248,7 +264,7 @@ for epoch in range(N_EPOCHS):
     
     if valid_loss < best_valid_loss:
         best_valid_loss = valid_loss
-        torch.save(model.state_dict(), 'models/s2s-model1-sep-clfs-sep-loss.pt')
+        torch.save(model.state_dict(), 'models/s2s-model1-sep-clfs-sep-loss-attn.pt')
     
     print(f'Epoch: {epoch+1:02} | Time: {epoch_mins}m {epoch_secs}s')
     print(f'\tTrain Loss: {train_loss:.3f} | Train PPL: {math.exp(train_loss):7.3f}')
@@ -257,11 +273,11 @@ for epoch in range(N_EPOCHS):
     print(f"F1 Score (Micro) = {f1_score_micro}")
     print(f"F1 Score (Macro) = {f1_score_macro}")
 
-model.load_state_dict(torch.load('models/s2s-model1-sep-clfs-sep-loss.pt'))
+# model.load_state_dict(torch.load('models/s2s-model1-sep-clfs-sep-loss-attn.pt'))
 
-test_loss, accuracy, f1_score_micro, f1_score_macro = evaluate(model, test_iterator, criterion_intent, criterion_emotion)
+# test_loss, accuracy, f1_score_micro, f1_score_macro = evaluate(model, test_iterator, criterion_intent, criterion_emotion)
 
-print(f'| Test Loss: {test_loss:.3f} | Test PPL: {math.exp(test_loss):7.3f} |')
-print(f"Accuracy Score = {accuracy}")
-print(f"F1 Score (Micro) = {f1_score_micro}")
-print(f"F1 Score (Macro) = {f1_score_macro}")
+# print(f'| Test Loss: {test_loss:.3f} | Test PPL: {math.exp(test_loss):7.3f} |')
+# print(f"Accuracy Score = {accuracy}")
+# print(f"F1 Score (Micro) = {f1_score_micro}")
+# print(f"F1 Score (Macro) = {f1_score_macro}")
