@@ -20,12 +20,10 @@ for ind, item in enumerate(data):
     for i, utterance in enumerate(complete_log):
         if utterance['text'] in extra_utterances:
             continue
-        parsedict = parser.parse(utterance['text'])
-        print(utterance['text'], parsedict)
-        exit()
+        parsedict = multi_parser.parse(utterance['text'])
         item['emotions'].append([utterance['text'], parsedict['emotion']['label']])
 
-with open(outfile, 'w') as f:
+with open('casino_with_emotions.json', 'w') as f:
     json.dump(data, f)
 
 # return X, Y
