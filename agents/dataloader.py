@@ -7,33 +7,36 @@ label_emotion = ["anger", "fear", "joy" ,"love", "sadness", "surprise"]
 label_intent = ['elicit-pref', 'no-need', 'uv-part', 'other-need', 'showing-empathy', 'vouch-fair', 'small-talk', 'self-need', 'promote-coordination', 'non-strategic']
 emotion_revdict = {ele: i for i, ele in enumerate(label_emotion)}
 intent_revdict = {ele: i for i, ele in enumerate(label_intent)}
+num_emotion = len(label_emotion)
+num_intent = len(label_intent)
+
+def emotion_label_to_index(label):
+    return emotion_revdict[label]
+
+def intent_label_to_index(labels):
+    empty_array = [0 for _ in range(num_intent)]
+    labels = labels.split(",")
+    for lbl in labels:
+        empty_array[intent_revdict[lbl]] = 1
+    return empty_array
 
 def local_proposal_dict(proposal_array):
     outdict = {}
     for ele in proposal_array:
         outdict[ele[0]] = {'Firewood': int(ele[1][0]), 'Water': int(ele[1][1]), 'Food': int(ele[1][2])}
-
     return outdict
 
 def local_emotion_dict(emotion_array):
     outdict = {}
     for ele in emotion_array:
-        outdict[ele[0]] = emotion_revdict[ele[1]]
-
+        outdict[ele[0]] = emotion_label_to_index(ele[1])
     return outdict
 
 def local_intent_dict(intent_array):
     outdict = {}
-    empty_array = [0 for _ in range(len(label_intent))]
     for ele in intent_array:
-        temp_arr = copy.deepcopy(empty_array)
-        labels = ele[1].split(",")
-        for label in labels:
-            temp_arr[intent_revdict[label]] = 1
-        outdict[ele[0]] = temp_arr
-
+        outdict[ele[0]] = intent_label_to_index(ele[1])
     return outdict
-
 
 def get_dataset(fname):
     conversations = []

@@ -1,26 +1,62 @@
 from dataloader import get_dataset
-from agents import RandomAgentStubborn, RandomAgentConsiderate
+from agents import AgentNoPlanningBayesian, AgentDataset
 
-def train(agent):
+def break_conversation(conversation):
+    return conversation[:4], conversation[4:]
+
+def agent_negotiation(agent_tuple, conversation, act_ag=0, mode='train', length_limit=20):
+    conv_prefix, conv_suffix = break_conversation(conversation)
+
+    conv_length = 0
+
+    agent_tuple[act_ag].step_passive(None, conv_prefix[0], mode=mode)
+    act_ag = (act_ag+1)%2
+    conv_length += 1
+
+    for dia, dia_next in zip(conv_prefix, conv_prefix[1:]):
+        agent_tuple[act_ag].step_passive(dia, dia_next, mode=mode)
+        act_ag = (act_ag+1)%2
+        conv_length += 1
+
+    prev_dialog = conv_prefix[-1]
+    while True:
+        if(conv_length > length_limit):
+            break
+        out_dialog = agent_tuple[act_ag].step(prev_dialog, mode=mode)
+        exit()
+        if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
+            break
+        conv_length += 1
+        prev_dialog = out_dialog
+
+    ## How do we get here?????
+    return proposal_tuple, conv_length
+
+def train(agent1, agent2):
     ## Load Dataset
     all_data = get_dataset('../casino_with_emotions.json')
-    print(all_data[0])
 
     ## Go through all the dialogues
-    for conversation in all_data:
+    for (conversation, participant_info) in all_data:
         ## Setup Agent's priority
+        ## Assumption here that the first person doesn't speak twice in a row at the start
+        agent1_id = conversation[0]['speaker_id']
+        agent1.set_priority(participant_info[agent1_id]['value2issue'])
 
-        ## create a conversation prefix if required
-        for dialogue in conversation_prefix:
-            agent.step_passive(mode='train')
+        ## Only if agent 1 is a dataset agent
+        agent1.set_conversation(conversation)
 
-        for dialogue in conversation_suffix:
-            ## Check for the correct id
-            agent.step(mode='train')
+        agent2_id = conversation[1]['speaker_id']
+        agent2.set_priority(participant_info[agent2_id]['value2issue'])
+
+        agent_negotiation([agent1, agent2], conversation, act_ag=0, mode='train', length_limit=20)
 
     ## save file
     agent.save_model(outfile)
 
 if __name__ == "__main__":
-    agent = RandomAgentStubborn()
-    train(agent)
+    score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
+    length_penalty = 0.5
+    agent1 = AgentDataset(score_weightage, length_penalty, 0)
+    agent2 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+    train(agent1, agent2)

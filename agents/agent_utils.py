@@ -1,6 +1,6 @@
 import random
 import json
-from parser import Parser
+# from parser import Parser
 
 def get_proposal_score(priorities, proposal, score_weightage):
     final_score = 0
