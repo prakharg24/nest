@@ -24,6 +24,14 @@ class AgentTabular():
     def set_conversation(self, conversation):
         self.conversation = conversation
 
+    def save_model(self, outfile='some_fixed_file.pt'):
+        ## Save the model parameters/dict etc. so that it can be easily laoded
+        return
+
+    def load_model(self, infile='some_fixed_file.pt'):
+        ## load the model parameters back
+        return
+
     def step(self, input_dict, mode='train'):
         ### Skeleton Function. Inherit this and change to return some sensible proposal
         return input_dict
@@ -36,10 +44,6 @@ class AgentTabular():
 class AgentDummy(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-
-    def step_passive(self, input_dict, output_dict, mode=None):
-        ### Do nothing since its the dummy agent
-        return
 
     def step(self, input_dict, mode=None):
         for ind, ele in enumerate(self.conversation):
@@ -94,7 +98,6 @@ class AgentNoPlanningBayesian(AgentTabular):
 
         input_dict['proposal'] = switch_proposal_perspective(input_dict['proposal'])
         self.seen += 1
-        print("Bayesian Agent Seen Examples : ", self.seen)
 
         self.set_emotion_counts(input_dict, output_dict)
         self.set_intent_counts(input_dict, output_dict)
@@ -118,13 +121,13 @@ class AgentNoPlanningBayesian(AgentTabular):
                 intent_choice_arr = normalize_prob(self.intent_trans_count[ite, :, input_dict['intent'][ite]])
                 out_intent.append(choose_random_with_prob(range(2), intent_choice_arr))
 
-            out_proposal = []
+            out_proposal_dict = {}
             input_proposal_arr = [input_dict['proposal'][self.priorities["High"]],
                                   input_dict['proposal'][self.priorities["Medium"]],
                                   input_dict['proposal'][self.priorities["Low"]]]
             for ind, priority in enumerate(self.priorities):
                 if input_proposal_arr[ind]==-1:
-                    out_proposal.append(np.random.choice([-1, 3-ind]))
+                    out_proposal_dict[self.priorities[priority]] = np.random.choice([-1, 3-ind])
                     continue
 
                 prob_emotion_given_proposal = normalize_prob(self.proposal_emotion_joint_count[priority][:, out_emotion])
@@ -136,17 +139,20 @@ class AgentNoPlanningBayesian(AgentTabular):
                 prob_numerator = prob_numerator * prob_prevproposal_given_proposal
 
                 proposal_choice_arr = normalize_prob(prob_numerator)
-                out_proposal.append(choose_random_with_prob(range(4), proposal_choice_arr))
+                out_proposal_dict[self.priorities[priority]] = choose_random_with_prob(range(4), proposal_choice_arr)
 
-            
+            return {'speaker_id' : self.name,
+                    'text' : 'Bayesian Agent does not generate text.',
+                    'is_marker' : False,
+                    'emotion' : out_emotion,
+                    'intent' : out_intent,
+                    'proposal' : out_proposal_dict}
+
 
     def set_emotion_counts(self, input_dict, output_dict):
-        self.emotion_count[output_dict['emotion']] += 1
         self.emotion_trans_count[input_dict['emotion'], output_dict['emotion']] += 1
 
     def set_intent_counts(self, input_dict, output_dict):
-        self.intent_count = np.array([e1 + e2 for e1, e2 in zip(self.intent_count, output_dict['intent'])])
-
         for counter, (e1, e2) in enumerate(zip(input_dict['intent'], output_dict['intent'])):
             self.intent_trans_count[counter, e1, e2] += 1
 
@@ -171,99 +177,11 @@ class AgentNoPlanningBayesian(AgentTabular):
             self.proposal_intent_joint_count["Medium"][output_arr[1], counter, e1] += 1
             self.proposal_intent_joint_count["Low"][output_arr[2], counter, e1] += 1
 
-class RandomAgentConsiderate(AgentTabular):
-    def __init__(self, score_weightage, length_penalty, id):
-        super().__init__(score_weightage, length_penalty, id)
+    def save_model(self, outfile='models/bayesian_v1.json'):
 
-    def set_priority_and_proposal(self, priorities):
-        self.set_priority(priorities)
-        self.proposal = self.set_initial_proposal()
-        self.proposal_float = copy.deepcopy(self.proposal)
+        outdict = {}
+        return
 
-    def set_initial_proposal(self):
-        proposal = {}
-        for ele in self.priorities:
-            if self.priorities[ele]=="High":
-                proposal[ele] = 3
-            elif self.priorities[ele]=="Medium":
-                proposal[ele] = 2
-            elif self.priorities[ele]=="Low":
-                proposal[ele] = 1
-        return proposal
-
-    def check_acceptable(self, proposal):
-        if incomplete_proposal(proposal):
-            return False
-        score_if_accept = get_proposal_score(self.priorities, proposal, self.score_weightage)
-        score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
-
-        if (score_if_accept >= score_current):
-            return True
-        else:
-            return False
-
-    def adjust_proposal(self, proposal):
-        for ele in self.proposal_float:
-            if (self.proposal_float[ele] > proposal[ele] and proposal[ele]!=-1):
-                self.proposal_float[ele] = self.proposal_float[ele] - 0.2
-
-        for ele in self.proposal_float:
-            self.proposal[ele] = math.ceil(self.proposal_float[ele])
-
-        return copy.deepcopy(self.proposal)
-
-    def step(self, input_emotion, input_intent, input_proposal):
-        is_acceptable = self.check_acceptable(input_proposal)
-
-        out_emotion = get_random_emotion()
-        out_intent = get_random_intent()
-
-        if is_acceptable:
-            out_proposal = input_proposal
-        else:
-            out_proposal = self.adjust_proposal(input_proposal)
-
-        return out_emotion, out_intent, out_proposal, is_acceptable
-
-class RandomAgentStubborn(AgentTabular):
-    def __init__(self, score_weightage, length_penalty, id):
-        super().__init__(score_weightage, length_penalty, id)
-
-    def set_priority_and_proposal(self, priorities):
-        self.set_priority(priorities)
-        self.proposal = self.set_initial_proposal()
-
-    def set_initial_proposal(self):
-        proposal = {}
-        for ele in self.priorities:
-            if self.priorities[ele]=="High":
-                proposal[ele] = 3
-            elif self.priorities[ele]=="Medium":
-                proposal[ele] = 2
-            elif self.priorities[ele]=="Low":
-                proposal[ele] = 1
-        return proposal
-
-    def check_acceptable(self, proposal):
-        if incomplete_proposal(proposal):
-            return False
-        score_if_accept = get_proposal_score(self.priorities, proposal, self.score_weightage)
-        score_current = get_proposal_score(self.priorities, self.proposal, self.score_weightage)
-
-        if (score_if_accept >= score_current):
-            return True
-        else:
-            return False
-
-    def step(self, input_emotion, input_intent, input_proposal):
-        is_acceptable = self.check_acceptable(input_proposal)
-
-        out_emotion = get_random_emotion()
-        out_intent = get_random_intent()
-
-        if is_acceptable:
-            out_proposal = input_proposal
-        else:
-            out_proposal = copy.deepcopy(self.proposal)
-
-        return out_emotion, out_intent, out_proposal, is_acceptable
+    def load_model(self, infile='models/bayesian_v1.json'):
+        ## load the model parameters back
+        return

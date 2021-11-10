@@ -26,7 +26,7 @@ def agent_negotiation(agent_tuple, conversation, act_ag=0, mode='train', length_
         if(conv_length > length_limit):
             break
         out_dialog = agent_tuple[act_ag].step(prev_dialog, mode=mode)
-        # print(out_dialog)
+        print(out_dialog)
         if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
             break
         conv_length += 1
@@ -57,13 +57,11 @@ def train(agent1, agent2):
         agent1.set_conversation(conversation)
         agent2.set_conversation(conversation)
 
-        if(i<20):
-            agent_negotiation([agent1, agent2], conversation, act_ag=0, mode='train', length_limit=20)
-        else:
-            agent_negotiation([agent1, agent2], conversation, act_ag=0, mode='eval', length_limit=20)
+        agent_negotiation([agent1, agent2], conversation, act_ag=0, mode='train', length_limit=20)
 
     ## save file
-    agent.save_model(outfile)
+    agent1.save_model()
+    agent2.save_model()
 
 if __name__ == "__main__":
     score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
