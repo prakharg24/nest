@@ -2,7 +2,7 @@ import copy
 import math
 import numpy as np
 from agent_utils import get_random_emotion, get_random_intent
-from agent_utils import get_proposal_score, incomplete_proposal, switch_proposal_perspective
+from agent_utils import get_proposal_score, incomplete_proposal, switch_proposal_perspective, normalize_prob, choose_random_with_prob
 from dataloader import label_emotion, label_intent, num_emotion, num_intent, emotion_label_to_index, intent_label_to_index
 
 ### define agents
@@ -14,7 +14,15 @@ class AgentTabular():
         self.id = id
 
     def set_priority(self, priorities):
+        sort_by = ["High", "Medium", "Low"]
+        priorities = {k: priorities[k] for k in sort_by}
         self.priorities = priorities
+
+    def set_name(self, agent_name):
+        self.name = agent_name
+
+    def set_conversation(self, conversation):
+        self.conversation = conversation
 
     def step(self, input_dict, mode='train'):
         ### Skeleton Function. Inherit this and change to return some sensible proposal
@@ -24,34 +32,31 @@ class AgentTabular():
         ### Skeleton Function. Inherit this and change to memorise the agent's history
         return
 
-class AgentDataset(AgentTabular):
+### Required for training of agents which use actual dataset based calculations
+class AgentDummy(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-        self.current_dialogue = 0
-
-    def set_conversation(self, conversation):
-        self.conversation = conversation
 
     def step_passive(self, input_dict, output_dict, mode=None):
-        for ind, ele in enumerate(self.conversation):
-            if ele == output_dict:
-                self.current_dialogue = ind
-        print("Dataset Current Dialogue :", self.current_dialogue)
+        ### Do nothing since its the dummy agent
+        return
 
     def step(self, input_dict, mode=None):
         for ind, ele in enumerate(self.conversation):
             if ele == input_dict:
-                self.current_dialogue = ind
-        print("Dataset Current Dialogue :", self.current_dialogue)
+                curr_dia = ind
+                break
+
+        return self.conversation[curr_dia + 1]
 
 class AgentNoPlanningBayesian(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.seen = 0 ## normalizer for probabilities
-        self.emotion_count = [0 for _ in range(num_emotion)] ## probability of each emotion
-        self.emotion_joint_trans_count = np.zeros((num_emotion, num_emotion)) ## transition probability between emotions
-        self.intent_count = [0 for _ in range(num_intent)] ## probability of each intent
-        self.intent_joint_trans_count = np.zeros((num_intent, 2, 2)) ## transition probability for each intent separately
+        self.emotion_count = np.array([0 for _ in range(num_emotion)]) ## probability of each emotion
+        self.emotion_trans_count = np.zeros((num_emotion, num_emotion)) ## transition probability between emotions
+        self.intent_count = np.array([0 for _ in range(num_intent)]) ## probability of each intent
+        self.intent_trans_count = np.zeros((num_intent, 2, 2)) ## transition probability for each intent separately
         self.proposal_prevproposal_joint_count = {"High": np.zeros((4, 4)),
                                                  "Medium": np.zeros((4, 4)),
                                                  "Low": np.zeros((4, 4))} ## joint probability of current and prev proposals
@@ -62,10 +67,19 @@ class AgentNoPlanningBayesian(AgentTabular):
                                             "Medium": np.zeros((4, num_intent, 2)),
                                             "Low": np.zeros((4, num_intent, 2))} ## joint probability of proposal and each intent separately
 
-        self.proposal_float = {"Firewood": -1., "Water": -1., "Food": -1.}
+        self.proposal_float = {"Firewood": -1, "Water": -1, "Food": -1}
+
+    def prepare_proposal(self):
+        proposal_out = {}
+        for ele in self.proposal_float:
+            if (ele != -1):
+                proposal_out[ele] = math.ceil(self.proposal_float[ele])
+            else:
+                proposal_out[ele] = -1
+        return proposal_out
 
     def step_passive(self, input_dict, output_dict, mode='train'):
-        if mode != 'train':
+        if mode == 'eval':
             ## If the agent is not in training mode, no need to record observations
             return
         if input_dict is None:
@@ -86,15 +100,55 @@ class AgentNoPlanningBayesian(AgentTabular):
         self.set_intent_counts(input_dict, output_dict)
         self.set_proposal_counts(input_dict, output_dict)
 
+    def step(self, input_dict, mode='train'):
+        if mode=='train':
+            for ind, ele in enumerate(self.conversation):
+                if ele == input_dict:
+                    curr_dia = ind
+                    break
+            self.step_passive(input_dict, self.conversation[ind+1], mode=mode)
+            return self.conversation[ind+1]
+
+        else:
+            emotion_choice_arr = normalize_prob(self.emotion_trans_count[:, input_dict['emotion']])
+            out_emotion = choose_random_with_prob(range(num_emotion), emotion_choice_arr)
+
+            out_intent = []
+            for ite in range(num_intent):
+                intent_choice_arr = normalize_prob(self.intent_trans_count[ite, :, input_dict['intent'][ite]])
+                out_intent.append(choose_random_with_prob(range(2), intent_choice_arr))
+
+            out_proposal = []
+            input_proposal_arr = [input_dict['proposal'][self.priorities["High"]],
+                                  input_dict['proposal'][self.priorities["Medium"]],
+                                  input_dict['proposal'][self.priorities["Low"]]]
+            for ind, priority in enumerate(self.priorities):
+                if input_proposal_arr[ind]==-1:
+                    out_proposal.append(np.random.choice([-1, 3-ind]))
+                    continue
+
+                prob_emotion_given_proposal = normalize_prob(self.proposal_emotion_joint_count[priority][:, out_emotion])
+                prob_numerator = prob_emotion_given_proposal
+                for ite in range(num_intent):
+                    prob_intent_given_proposal = normalize_prob(self.proposal_intent_joint_count[priority][:, ite, out_intent[ite]])
+                    prob_numerator = prob_numerator * prob_intent_given_proposal
+                prob_prevproposal_given_proposal = normalize_prob(self.proposal_prevproposal_joint_count[priority][:, input_proposal_arr[ind]])
+                prob_numerator = prob_numerator * prob_prevproposal_given_proposal
+
+                proposal_choice_arr = normalize_prob(prob_numerator)
+                out_proposal.append(choose_random_with_prob(range(4), proposal_choice_arr))
+
+            
+
     def set_emotion_counts(self, input_dict, output_dict):
         self.emotion_count[output_dict['emotion']] += 1
-        self.emotion_joint_trans_count[input_dict['emotion'], output_dict['emotion']] += 1
+        self.emotion_trans_count[input_dict['emotion'], output_dict['emotion']] += 1
 
     def set_intent_counts(self, input_dict, output_dict):
-        self.intent_count = [e1 + e2 for e1, e2 in zip(self.intent_count, output_dict['intent'])]
+        self.intent_count = np.array([e1 + e2 for e1, e2 in zip(self.intent_count, output_dict['intent'])])
 
         for counter, (e1, e2) in enumerate(zip(input_dict['intent'], output_dict['intent'])):
-            self.intent_joint_trans_count[counter, e1, e2] += 1
+            self.intent_trans_count[counter, e1, e2] += 1
 
     def set_proposal_counts(self, input_dict, output_dict):
         input_arr = [input_dict['proposal'][self.priorities["High"]],

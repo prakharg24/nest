@@ -1,5 +1,6 @@
 import json
 import copy
+import random
 
 extra_utterances = ['Submit-Deal', 'Accept-Deal', 'Reject-Deal', 'Walk-Away', 'Submit-Post-Survey']
 label_emotion = ["anger", "fear", "joy" ,"love", "sadness", "surprise"]
@@ -38,7 +39,7 @@ def local_intent_dict(intent_array):
         outdict[ele[0]] = intent_label_to_index(ele[1])
     return outdict
 
-def get_dataset(fname):
+def get_dataset(fname, shuffle=False):
     conversations = []
 
     data = json.load(open(fname))
@@ -79,4 +80,6 @@ def get_dataset(fname):
 
         conversations.append((dialogues, participant_info))
 
+    if shuffle:
+        random.shuffle(conversations)
     return conversations
