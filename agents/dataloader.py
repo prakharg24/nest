@@ -66,7 +66,7 @@ def get_dataset(fname, shuffle=False):
                 dialogue_dict['emotion'] = None
                 dialogue_dict['intent'] = None
                 if utterance['text']=='Submit-Deal':
-                    dialogue_dict['proposal'] = utterance['task_data']['issue2youget']
+                    dialogue_dict['proposal'] = {k: int(utterance['task_data']['issue2youget'][k]) for k in utterance['task_data']['issue2youget']}
                 else:
                     dialogue_dict['proposal'] = None
             else:

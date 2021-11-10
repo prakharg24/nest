@@ -26,11 +26,16 @@ def incomplete_proposal(proposal):
             return True
     return False
 
-def switch_proposal_perspective(proposal):
-    for ele in proposal:
-        if (proposal[ele]!=-1):
-            proposal[ele] = 3 - proposal[ele]
-    return proposal
+def switch_proposal_perspective(inpdict):
+    if inpdict is None:
+        return inpdict
+    if inpdict['proposal'] is None:
+        return inpdict
+    for ele in inpdict['proposal']:
+        if (inpdict['proposal'][ele]!=-1):
+            inpdict['proposal'][ele] = 3 - inpdict['proposal'][ele]
+
+    return inpdict
 
 def get_random_emotion():
     return random.randint(0, 5)
