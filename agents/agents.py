@@ -240,9 +240,9 @@ class AgentMCTS(AgentTabular):
         self.state_space_dim = state_space
 
         state_space_size = np.prod(self.state_space_dim)
-        self.state_visit_counts = csr_matrix((state_space_size, 1), dtype=np.int8)
-        self.state_action_visit_counts = csr_matrix((state_space_size, state_space_size), dtype=np.int8)
-        self.utility_space = csr_matrix((state_space_size, state_space_size), dtype=np.int8)
+        self.state_visit_counts = csr_matrix((state_space_size, 1))
+        self.state_action_visit_counts = csr_matrix((state_space_size, state_space_size))
+        self.utility_space = csr_matrix((state_space_size, state_space_size))
 
         self.trial_visits = []
         self.history = None
@@ -266,45 +266,40 @@ class AgentMCTS(AgentTabular):
         current_state = self.get_state_from_dict(input_dict)
         current_state_index = self.state_to_index(current_state)
 
-        utility_arr = np.array(self.utility_space[current_state_index, :].todense())
+        utility_arr = self.utility_space[current_state_index, :]
         visits_arr = self.state_action_visit_counts[current_state_index, :]
         state_visit_count = self.state_visit_counts[current_state_index, 0]
 
-        it = np.nditer(utility_arr, flags=['multi_index'], op_flags=['readwrite'])
-        exit()
+        indices = visits_arr.nonzero()
+        indices = indices[1]
+
+        all_indices = set(range(np.prod(self.state_space_dim)))
+        exploration_indices = np.random.choice(list(all_indices - set(indices)), size=10)
+
+        indices = np.concatenate((indices, exploration_indices))
+
         best_score = -1e10
-        best_ind = None
-        for utility in it:
-            curr_ind = it.multi_index
-            visit_count = visits_arr[curr_ind]
-            score = utility + self.exploration_term*math.sqrt(math.log(state_visit_count)/visit_count)
+        best_ind_arr = []
+        for ele in indices:
+            utility_value = utility_arr[0, ele]
+            visits_count = visits_arr[0, ele]
+            score = utility_value + self.exploration_term*math.sqrt(math.log(state_visit_count+1)/(visits_count+1))
+            if score == best_score:
+                best_ind_arr.append(ele)
             if score > best_score:
                 best_score = score
-                best_ind = curr_ind
+                best_ind_arr = [ele]
 
-        current_action = list(best_ind)
-        self.trial_visits.append((current_state, current_action))
+        best_action = np.random.choice(best_ind_arr)
 
-        return self.get_dict_from_state(current_action)
+        self.trial_visits.append((current_state_index, best_action))
 
+        return self.get_dict_from_state(self.index_to_state(best_action))
 
     def set_priority(self, priorities):
         sort_by = ["High", "Medium", "Low"]
         priorities = {k: priorities[k] for k in sort_by}
         self.priorities = priorities
-        # self.fill_heuristic_utility()
-
-    def fill_heuristic_utility(self):
-        it = np.nditer(self.utility_space, flags=['multi_index'], op_flags=['readwrite'])
-        for ele in it:
-            curr_ind = it.multi_index
-            proposal = {}
-            proposal[self.priorities["High"]] = curr_ind[-3]
-            proposal[self.priorities["Medium"]] = curr_ind[-2]
-            proposal[self.priorities["Low"]] = curr_ind[-1]
-
-            score = get_proposal_score(self.priorities, proposal, self.score_weightage)
-            ele[...] = score
 
     def get_state_from_dict(self, inpdict):
         state = []
