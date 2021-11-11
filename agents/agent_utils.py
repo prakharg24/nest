@@ -26,6 +26,9 @@ def incomplete_proposal(proposal):
             return True
     return False
 
+def convert_proposal_to_arr(proposal, priorities):
+    return [proposal[priorities["High"]], proposal[priorities["Medium"]], proposal[priorities["Low"]]]
+
 def switch_proposal_perspective(inpdict):
     if inpdict is None:
         return inpdict

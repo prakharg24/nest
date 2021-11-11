@@ -1,10 +1,11 @@
 import copy
 import math
 import numpy as np
+from scipy.sparse import csr_matrix
 import json
 import pickle
-from agent_utils import get_random_emotion, get_random_intent
-from agent_utils import get_proposal_score, incomplete_proposal, switch_proposal_perspective, normalize_prob, choose_random_with_prob
+from agent_utils import get_random_emotion, get_random_intent, choose_random_with_prob, normalize_prob
+from agent_utils import get_proposal_score, incomplete_proposal, switch_proposal_perspective, convert_proposal_to_arr
 from dataloader import label_emotion, label_intent, num_emotion, num_intent, emotion_label_to_index, intent_label_to_index
 
 ### define agents
@@ -63,6 +64,7 @@ class AgentDummy(AgentTabular):
 
         return self.conversation[curr_dia + 1]
 
+
 class AgentNoPlanningBayesian(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
@@ -93,10 +95,8 @@ class AgentNoPlanningBayesian(AgentTabular):
             ## Marker sentences.
             if input_dict['text']=='Submit-Deal' and output_dict['text']=='Accept-Deal':
                 ## The submitted deal will not contain a -1
-                high_index = input_dict['proposal'][self.priorities["High"]]
-                medium_index = input_dict['proposal'][self.priorities["Medium"]]
-                low_index = input_dict['proposal'][self.priorities["Low"]]
-                self.acceptance_count[high_index, medium_index, low_index] += 1
+                acceptance_index = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
+                self.acceptance_count[tuple(acceptance_index)] += 1
             return
 
         self.set_emotion_counts(input_dict, output_dict)
@@ -121,10 +121,8 @@ class AgentNoPlanningBayesian(AgentTabular):
         if input_dict['is_marker']:
             ## Marker cases
             if input_dict['text']=='Submit-Deal':
-                high_index = input_dict['proposal'][self.priorities["High"]]
-                medium_index = input_dict['proposal'][self.priorities["Medium"]]
-                low_index = input_dict['proposal'][self.priorities["Low"]]
-                acceptance_prob = sum(self.acceptance_count[:high_index, :medium_index, :low_index])/sum(self.acceptance_count)
+                acceptance_index = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
+                acceptance_prob = sum(self.acceptance_count[:acceptance_index[0], :acceptance_index[1], :acceptance_index[2]])/sum(self.acceptance_count)
                 is_accepted = np.random.choice([True, False], p=[acceptance_prob, 1-acceptance_prob])
 
                 if is_accepted:
@@ -151,9 +149,7 @@ class AgentNoPlanningBayesian(AgentTabular):
         ## Calculate P(Proposal | Prev Proposal, Emotion, Intent) = P(Emotion | Proposal) * P(Intent | Proposal) * P(Prev Proposal | Proposal) / Z
         ## Z is the normalising factor
         out_proposal_dict = {}
-        input_proposal_arr = [input_dict['proposal'][self.priorities["High"]],
-                              input_dict['proposal'][self.priorities["Medium"]],
-                              input_dict['proposal'][self.priorities["Low"]]]
+        input_proposal_arr = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
         for ind, priority in enumerate(self.priorities):
             if input_proposal_arr[ind]==-1:
                 out_proposal_dict[self.priorities[priority]] = np.random.choice([-1, 3-ind])
@@ -193,8 +189,8 @@ class AgentNoPlanningBayesian(AgentTabular):
             self.intent_trans_count[counter, e1, e2] += 1
 
     def set_proposal_counts(self, input_dict, output_dict):
-        input_arr = [input_dict['proposal'][self.priorities[ele]] for ele in self.priorities]
-        output_arr = [output_dict['proposal'][self.priorities[ele]] for ele in self.priorities]
+        input_arr = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
+        output_arr = convert_proposal_to_arr(output_dict['proposal'], self.priorities)
 
         for ind, priority in enumerate(self.priorities):
             if input_arr[ind]==-1 or output_arr[ind]==-1:
@@ -237,55 +233,120 @@ class AgentNoPlanningBayesian(AgentTabular):
 class AgentMCTS(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-        self.utility_space = np.zeros((num_emotion, num_intent, 2, 4, 4, 4))
-        self.visit_counts = np.ones((num_emotion, num_intent, 2, 4, 4, 4))
+        state_space = []
+        state_space.append(num_emotion) ## For emotions
+        state_space.extend([2 for _ in range(num_intent)]) ## For intent
+        state_space.extend([4, 4, 4]) ## For proposals
+        self.state_space_dim = state_space
+
+        state_space_size = np.prod(self.state_space_dim)
+        self.state_visit_counts = csr_matrix((state_space_size, 1), dtype=np.int8)
+        self.state_action_visit_counts = csr_matrix((state_space_size, state_space_size), dtype=np.int8)
+        self.utility_space = csr_matrix((state_space_size, state_space_size), dtype=np.int8)
+
         self.trial_visits = []
         self.history = None
 
-    def step_active(self, input_dict, mode='eval'):
-        ### Skeleton Function. Inherit this and change to return some sensible proposal
-        return input_dict
+        self.exploration_term = 1
 
     def step_passive(self, input_dict, output_dict, mode='train'):
         if mode != 'train':
-            ## No history saving required in the eval mode
+            ## We don't need to record history is agent is in evaluation mode
             return
         if input_dict is None:
-            ## Just the first spoken dialogue. Skip
+            ## First dialogue with no input. Skip this
             return
 
-        if input_dict['is_marker'] or output_dict['is_marker']:
-            ## Marker sentences.
-            if input_dict['text']=='Submit-Deal' and output_dict['text']=='Accept-Deal':
-                ## The submitted deal will not contain a -1
-                high_index = input_dict['proposal'][self.priorities["High"]]
-                medium_index = input_dict['proposal'][self.priorities["Medium"]]
-                low_index = input_dict['proposal'][self.priorities["Low"]]
-                self.acceptance_count[high_index, medium_index, low_index] += 1
-            return
+        current_state = self.get_state_from_dict(input_dict)
+        current_action = self.get_state_from_dict(output_dict)
+        self.trial_visits.append((self.state_to_index(current_state), self.state_to_index(current_action)))
 
-        self.set_emotion_counts(input_dict, output_dict)
-        self.set_intent_counts(input_dict, output_dict)
-        self.set_proposal_counts(input_dict, output_dict)
-        return
+    def step_active(self, input_dict, mode='eval'):
+
+        current_state = self.get_state_from_dict(input_dict)
+        current_state_index = self.state_to_index(current_state)
+
+        utility_arr = np.array(self.utility_space[current_state_index, :].todense())
+        visits_arr = self.state_action_visit_counts[current_state_index, :]
+        state_visit_count = self.state_visit_counts[current_state_index, 0]
+
+        it = np.nditer(utility_arr, flags=['multi_index'], op_flags=['readwrite'])
+        exit()
+        best_score = -1e10
+        best_ind = None
+        for utility in it:
+            curr_ind = it.multi_index
+            visit_count = visits_arr[curr_ind]
+            score = utility + self.exploration_term*math.sqrt(math.log(state_visit_count)/visit_count)
+            if score > best_score:
+                best_score = score
+                best_ind = curr_ind
+
+        current_action = list(best_ind)
+        self.trial_visits.append((current_state, current_action))
+
+        return self.get_dict_from_state(current_action)
+
 
     def set_priority(self, priorities):
         sort_by = ["High", "Medium", "Low"]
         priorities = {k: priorities[k] for k in sort_by}
         self.priorities = priorities
-        self.fill_heuristic_utility()
+        # self.fill_heuristic_utility()
 
     def fill_heuristic_utility(self):
         it = np.nditer(self.utility_space, flags=['multi_index'], op_flags=['readwrite'])
         for ele in it:
             curr_ind = it.multi_index
             proposal = {}
-            proposal[self.priorities["High"]] = curr_ind[3]
-            proposal[self.priorities["Medium"]] = curr_ind[4]
-            proposal[self.priorities["Low"]] = curr_ind[5]
+            proposal[self.priorities["High"]] = curr_ind[-3]
+            proposal[self.priorities["Medium"]] = curr_ind[-2]
+            proposal[self.priorities["Low"]] = curr_ind[-1]
 
             score = get_proposal_score(self.priorities, proposal, self.score_weightage)
             ele[...] = score
+
+    def get_state_from_dict(self, inpdict):
+        state = []
+        state.append(inpdict['emotion'])
+        state.extend(inpdict['intent'])
+        state.extend(convert_proposal_to_arr(inpdict['proposal'], self.priorities))
+
+        return state
+
+    def get_dict_from_state(self, state):
+        outdict = {}
+        outdict['speaker_id'] = self.name
+        outdict['text'] = 'MCTS Agent does not generate text.'
+        outdict['is_marker'] = False
+        outdict['emotion'] = state[0]
+        outdict['intent'] = state[1:11]
+        proposal = {}
+        proposal[self.priorities["High"]] = state[-3]
+        proposal[self.priorities["Medium"]] = state[-2]
+        proposal[self.priorities["Low"]] = state[-1]
+        outdict['proposal'] = proposal
+
+        return outdict
+
+    def state_to_index(self, state):
+        index = 0
+        mult = np.prod(self.state_space_dim)
+        for ele, ref in zip(state, self.state_space_dim):
+            mult = mult//ref
+            index += ele*mult
+
+        return index
+
+    def index_to_state(self, index):
+        state = []
+        mult = np.prod(self.state_space_dim)
+        for ref in self.state_space_dim:
+            mult = mult//ref
+            state.append(index//mult)
+            index = index%mult
+
+        return state
 
     def save_model(self, outfile='some_fixed_file.pt'):
         ## Save the model parameters/dict etc. so that it can be easily laoded

@@ -58,6 +58,7 @@ def get_dataset(fname, shuffle=False):
 
         complete_log = item['chat_logs']
         participant_info = item['participant_info']
+        prev_speaker = None
         for i, utterance in enumerate(complete_log):
             ## Assumption, the dialogue loader will never account for markers like submit-deal, reject-deal, accept-deal etc.
             dialogue_dict = {}
@@ -77,6 +78,7 @@ def get_dataset(fname, shuffle=False):
                 dialogue_dict['intent'] = intent_dict[utterance['text']]
                 dialogue_dict['proposal'] = proposal_dict[utterance['text']]
 
+            ###### NEED TO CLEAN UP CONVERSATIONS WITH CONSECUTIVE SPEAKERS!!!
 
             dialogues.append(dialogue_dict)
 
