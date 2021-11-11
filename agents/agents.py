@@ -37,12 +37,16 @@ class AgentTabular():
         ## load the model parameters back
         return
 
+    def step_passive(self, input_dict, output_dict, mode='train'):
+        ### Skeleton Function. Inherit this and change to memorise the agent's history
+        return
+
     def step_active(self, input_dict, mode='eval'):
         ### Skeleton Function. Inherit this and change to return some sensible proposal
         return input_dict
 
-    def step_passive(self, input_dict, output_dict, mode='train'):
-        ### Skeleton Function. Inherit this and change to memorise the agent's history
+    def step_reward(self, reward):
+        ### Use this function for rewards update at the end of every conversation
         return
 
     def start_conversation(self):
@@ -53,18 +57,36 @@ class AgentTabular():
 class AgentDummy(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
+        self.conversation_count = 0
 
-    def step_active(self, input_dict, mode=None):
-        ## Switch perspective since we are looking for other speaker's utterance
-        input_dict = switch_proposal_perspective(input_dict)
-        for ind, ele in enumerate(self.conversation):
-            if ele == input_dict:
-                curr_dia = ind
+    def step_passive(self, input_dict, output_dict, mode='train'):
+        return_ind = None
+        for ind in range(self.conversation_count, len(self.conversation)):
+            if self.conversation[ind]['speaker_id'] == self.name:
+                return_ind = ind
                 break
 
-        return self.conversation[curr_dia + 1]
+        self.conversation_count = return_ind + 1
 
+    def step_active(self, input_dict, mode=None):
+        return_ind = None
+        for ind in range(self.conversation_count, len(self.conversation)):
+            if self.conversation[ind]['speaker_id'] == self.name:
+                return_ind = ind
+                break
 
+        if return_ind is None:
+            ## Walk away from the conversation
+            return {'speaker_id' : self.name, 'text' : 'Walk-Away', 'is_marker' : True,
+                    'emotion' : None, 'intent' : None, 'proposal' : None}
+
+        self.conversation_count = return_ind + 1
+        return self.conversation[ind]
+
+    def start_conversation(self):
+        self.conversation_count = 0
+
+### Bayesian Agent that uses existing data to create probability arrays
 class AgentNoPlanningBayesian(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
@@ -111,18 +133,18 @@ class AgentNoPlanningBayesian(AgentTabular):
                 if ele == input_dict:
                     curr_dia = ind
                     break
-            self.step_passive(input_dict, self.conversation[ind+1], mode=mode)
-            return self.conversation[ind+1]
+            self.step_passive(input_dict, self.conversation[curr_dia+1], mode=mode)
+            return self.conversation[curr_dia+1]
 
         if input_dict is None:
             ## The case when the agent needs to speak first
-            raise Exception("Input Dict was Empty. The Agents are not trained to start negotiations")
+            raise Exception("Input Dict was Empty. The Agents are not trained to actively start negotiations")
 
         if input_dict['is_marker']:
             ## Marker cases
             if input_dict['text']=='Submit-Deal':
                 acceptance_index = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
-                acceptance_prob = sum(self.acceptance_count[:acceptance_index[0], :acceptance_index[1], :acceptance_index[2]])/sum(self.acceptance_count)
+                acceptance_prob = np.sum(self.acceptance_count[:acceptance_index[0]+1, :acceptance_index[1]+1, :acceptance_index[2]+1])/np.sum(self.acceptance_count)
                 is_accepted = np.random.choice([True, False], p=[acceptance_prob, 1-acceptance_prob])
 
                 if is_accepted:
@@ -168,7 +190,7 @@ class AgentNoPlanningBayesian(AgentTabular):
 
         self.history = input_dict
 
-        if input_dict['proposal'] == out_proposal_dict and not incomplete_proposal(out_proposal_dict):
+        if input_dict['proposal'] == out_proposal_dict and not incomplete_proposal(input_dict['proposal']):
             ## It seems liek something has been agreed upon. Submit a deal
             return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
                     'emotion' : None, 'intent' : None, 'proposal' : out_proposal_dict}
@@ -229,7 +251,7 @@ class AgentNoPlanningBayesian(AgentTabular):
         self.name = None
         self.conversation = None
 
-
+### MCTS Agent
 class AgentMCTS(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
@@ -244,10 +266,16 @@ class AgentMCTS(AgentTabular):
         self.state_action_visit_counts = csr_matrix((state_space_size, state_space_size))
         self.utility_space = csr_matrix((state_space_size, state_space_size))
 
+        self.marker_state_visit_counts = np.zeros((4, 4, 4))
+        self.marker_action_visit_counts = np.zeros((4, 4, 4, 2))
+        self.marker_utility_space = np.zeros((4, 4, 4, 2))
+
         self.trial_visits = []
+        self.marker_visits = []
         self.history = None
 
         self.exploration_term = 1
+        self.marker_exploration_term = 1
 
     def step_passive(self, input_dict, output_dict, mode='train'):
         if mode != 'train':
@@ -262,6 +290,37 @@ class AgentMCTS(AgentTabular):
         self.trial_visits.append((self.state_to_index(current_state), self.state_to_index(current_action)))
 
     def step_active(self, input_dict, mode='eval'):
+        if input_dict is None:
+            ## The case when the agent needs to speak first
+            raise Exception("Input Dict was Empty. The Agents are not trained to start negotiations")
+
+        if input_dict['is_marker']:
+            ## Marker cases
+            if input_dict['text']=='Submit-Deal':
+                ## How to Mark Acceptance in MCTS?????
+                acceptance_arr = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
+                acceptance_index = tuple(acceptance_arr)
+
+                marker_utility_arr = self.marker_utility_space[acceptance_index]
+                marker_visits_arr = self.marker_action_visit_counts[acceptance_index]
+                marker_state_visit_count = self.marker_state_visit_counts[acceptance_index]
+
+                acceptance_score = marker_utility_arr[0] + self.marker_exploration_term*math.sqrt(math.log(marker_state_visit_count+1)/(marker_visits_arr[0]+1))
+                rejection_score = marker_utility_arr[1] + self.marker_exploration_term*math.sqrt(math.log(marker_state_visit_count+1)/(marker_visits_arr[1]+1))
+
+                is_accepted = acceptance_score >= rejection_score
+                self.marker_visits.append((acceptance_index, int(is_accepted)))
+
+                if is_accepted:
+                    return {'speaker_id' : self.name, 'text' : 'Accept-Deal', 'is_marker' : True,
+                            'emotion' : None, 'intent' : None, 'proposal' : None}
+                else:
+                    return {'speaker_id' : self.name, 'text' : 'Reject-Deal', 'is_marker' : True,
+                            'emotion' : None, 'intent' : None, 'proposal' : None}
+
+            elif input_dict['text']=='Reject-Deal':
+                ## Use the last conversation again to regenerate a proposal
+                input_dict = self.history
 
         current_state = self.get_state_from_dict(input_dict)
         current_state_index = self.state_to_index(current_state)
@@ -280,21 +339,40 @@ class AgentMCTS(AgentTabular):
 
         best_score = -1e10
         best_ind_arr = []
-        for ele in indices:
-            utility_value = utility_arr[0, ele]
-            visits_count = visits_arr[0, ele]
+        for ind in indices:
+            utility_value = utility_arr[0, ind]
+            visits_count = visits_arr[0, ind]
             score = utility_value + self.exploration_term*math.sqrt(math.log(state_visit_count+1)/(visits_count+1))
             if score == best_score:
-                best_ind_arr.append(ele)
+                best_ind_arr.append(ind)
             if score > best_score:
                 best_score = score
-                best_ind_arr = [ele]
+                best_ind_arr = [ind]
 
         best_action = np.random.choice(best_ind_arr)
 
         self.trial_visits.append((current_state_index, best_action))
 
-        return self.get_dict_from_state(self.index_to_state(best_action))
+        output_dict = self.get_dict_from_state(self.index_to_state(best_action))
+
+        self.history = input_dict
+        if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
+            ## It seems like something has been agreed upon. Submit a deal
+            return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
+                    'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
+
+        return output_dict
+
+    def step_reward(self, reward):
+        for ele in self.trial_visits:
+            self.state_visit_counts[ele[0], 0] += 1
+            self.state_action_visit_counts[ele[0], ele[1]] += 1
+            self.utility_space[ele[0], ele[1]] += reward
+
+        for ele in self.marker_visits:
+            self.marker_state_visit_counts[ele[0], 0] += 1
+            self.marker_action_visit_counts[ele[0], ele[1]] += 1
+            self.marker_utility_space[ele[0], ele[1]] += 1
 
     def set_priority(self, priorities):
         sort_by = ["High", "Medium", "Low"]
@@ -357,4 +435,5 @@ class AgentMCTS(AgentTabular):
         self.name = None
         self.conversation = None
         self.trial_visits = []
+        self.marker_visits = []
         return

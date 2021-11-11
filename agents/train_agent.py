@@ -1,15 +1,36 @@
 from dataloader import get_dataset
 from agents import AgentNoPlanningBayesian, AgentDummy, AgentMCTS
-from agent_utils import switch_proposal_perspective
+from agent_utils import switch_proposal_perspective, get_proposal_score
 
 import copy
 import random
 random.seed(62)
 
+score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
+length_penalty = 0.5
+
 def break_conversation(conversation):
     return conversation[:4], conversation[4:]
 
-def agent_negotiation(agent_tuple, conversation, act_ag=0, length_limit=20, mode=['train', 'train']):
+def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, length_limit=20, mode=['train', 'train']):
+    ## Reset Agent State if required at the start of conversation
+    agent_tuple[act_ag].start_conversation()
+    agent_tuple[(act_ag+1)%2].start_conversation()
+
+    ## Setup Agent's priority
+    ## Assumption here that the first person doesn't speak twice in a row at the start
+    agent1_id = conversation[0]['speaker_id']
+    agent_tuple[act_ag].set_priority(participant_info[agent1_id]['value2issue'])
+    agent_tuple[act_ag].set_name(agent1_id)
+
+    agent2_id = conversation[1]['speaker_id']
+    agent_tuple[(act_ag+1)%2].set_priority(participant_info[agent2_id]['value2issue'])
+    agent_tuple[(act_ag+1)%2].set_name(agent2_id)
+
+    ## Certain agents require complete conversation for training
+    agent_tuple[act_ag].set_conversation(conversation)
+    agent_tuple[(act_ag+1)%2].set_conversation(conversation)
+
     conv_prefix, conv_suffix = break_conversation(conversation)
 
     conv_length = 0
@@ -29,52 +50,60 @@ def agent_negotiation(agent_tuple, conversation, act_ag=0, length_limit=20, mode
         if(conv_length > length_limit):
             break
         out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog), mode=mode[act_ag])
+        # print(out_dialog)
         if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
             break
         conv_length += 1
         act_ag = (act_ag+1)%2
         prev_dialog = out_dialog
 
-    ## Reward setup is required
-    return
+    reward_tuple = [0, 0]
+    if prev_dialog['proposal'] is not None:
+        conv_length_penalty = length_penalty*conv_length
 
-def train(agent1, agent2):
+        reward_tuple[(act_ag+1)%2] = get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - conv_length_penalty
+
+        prev_dialog_reverted = switch_proposal_perspective(prev_dialog)
+        reward_tuple[act_ag] = get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage) - conv_length_penalty
+
+    agent_tuple[0].step_reward(reward_tuple[0])
+    agent_tuple[1].step_reward(reward_tuple[1])
+
+    return reward_tuple
+
+def train(agent1, agent2, mode=['eval', 'train']):
     ## Load Dataset
     all_data = get_dataset('../casino_with_emotions_and_intents.json', shuffle=True)
 
+    rewards = [0, 0]
     ## Go through all the dialogues
     for i, (conversation, participant_info) in enumerate(all_data):
-        ## Reset Agent State if required at the start of conversation
-        agent1.start_conversation()
-        agent2.start_conversation()
-
-        ## Setup Agent's priority
-        ## Assumption here that the first person doesn't speak twice in a row at the start
-        agent1_id = conversation[0]['speaker_id']
-        agent1.set_priority(participant_info[agent1_id]['value2issue'])
-        agent1.set_name(agent1_id)
-
-        agent2_id = conversation[1]['speaker_id']
-        agent2.set_priority(participant_info[agent2_id]['value2issue'])
-        agent2.set_name(agent2_id)
-
-        ## Certain agents require complete conversation for training
-        agent1.set_conversation(conversation)
-        agent2.set_conversation(conversation)
-
-        agent_negotiation([agent1, agent2], copy.deepcopy(conversation), act_ag=0, mode=['eval', 'train'], length_limit=20)
-        ## Repeat the negotiation again but with reversed roles
-        agent_negotiation([agent1, agent2], copy.deepcopy(conversation), act_ag=1, mode=['eval', 'train'], length_limit=20)
+        reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=0, mode=mode, length_limit=20)
+        rewards[0] += reward_tuple[0]
+        rewards[1] += reward_tuple[1]
+        reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=1, mode=mode, length_limit=20)
+        rewards[0] += reward_tuple[0]
+        rewards[1] += reward_tuple[1]
+        print("Rewards Agent 1", rewards[0])
+        print("Rewards Agent 2", rewards[1])
 
     ## save file
     agent1.save_model()
     agent2.save_model()
 
 if __name__ == "__main__":
-    score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
-    length_penalty = 0.5
-    # agent1 = AgentDummy(score_weightage, length_penalty, 0)
-    agent1 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
-    agent2 = AgentMCTS(score_weightage, length_penalty, 0)
-    agent1.load_model()
-    train(agent1, agent2)
+    training_setup = 3
+    if training_setup==1:
+        agent1 = AgentDummy(score_weightage, length_penalty, 0)
+        agent2 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+        train(agent1, agent2, mode=['eval', 'train'])
+    if training_setup==2:
+        agent1 = AgentDummy(score_weightage, length_penalty, 0)
+        agent2 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+        agent2.load_model()
+        train(agent1, agent2, mode=['eval', 'eval'])
+    elif training_setup==3:
+        agent1 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+        agent1.load_model()
+        agent2 = AgentMCTS(score_weightage, length_penalty, 0)
+        train(agent1, agent2, mode=['eval', 'train'])

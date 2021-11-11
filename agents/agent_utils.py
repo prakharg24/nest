@@ -4,11 +4,13 @@ import numpy as np
 # from parser import Parser
 
 def normalize_prob(prob_arr):
-    if sum(prob_arr)!=0:
-        return prob_arr/sum(prob_arr)
+    if np.sum(prob_arr)!=0:
+        return prob_arr/np.sum(prob_arr)
+
+    return prob_arr
 
 def choose_random_with_prob(arr, prob):
-    if sum(prob)==1:
+    if np.sum(prob)==1:
         return np.random.choice(arr, p=prob)
     else:
         return np.random.choice(arr)
