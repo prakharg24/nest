@@ -14,7 +14,7 @@ score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
 length_penalty = 0.5
 length_limit = 20
 
-num_rounds = 10
+num_rounds = 2
 
 all_data = get_dataset('../casino_with_emotions_and_intents.json')
 
@@ -70,6 +70,7 @@ for round in range(num_rounds):
         agent_scores[agent_tuple[0].id] += reward_tuple[0]
         agent_scores[agent_tuple[1].id] += reward_tuple[1]
 
+# agent_list[-1].save_model()
 agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: item[1])}
 print("Final Scores")
 print(agent_scores)

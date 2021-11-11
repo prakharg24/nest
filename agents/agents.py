@@ -886,37 +886,55 @@ class AgentDeepQLearningMLP(AgentTabular):
 
         return outdict
 
-    def save_model(self, outfile='models/qlearning_v1.pkl'):
-        outdict = {'state_space_dim'                : self.state_space_dim,
-                   'state_action_visit_counts'      : self.state_action_visit_counts,
-                   'utility_space'                  : self.utility_space,
-                   'marker_action_visit_counts'     : self.marker_action_visit_counts,
-                   'marker_utility_space'           : self.marker_utility_space,
+    def save_model(self, outfolder='models/deepqlearning/'):
+        print("Hello")
+        outdict = {'state_space_onehot'             : self.state_space_onehot,
+                   'marker_space_onehot'            : self.marker_space_onehot,
                    'epsilon'                        : self.epsilon,
                    'marker_epsilon'                 : self.marker_epsilon,
-                   'alpha'                          : self.alpha,
-                   'marker_alpha'                   : self.marker_alpha,
                    'gamma'                          : self.gamma,
                    'marker_gamma'                   : self.marker_gamma}
 
-        with open(outfile, 'wb') as fp:
+        with open(outfolder + "hyperparameters.pkl", 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='models/qlearning_v1.pkl'):
-        with open(infile, 'rb') as fp:
+        state_dicts = []
+        state_dicts.append(self.emotion_model.state_dict())
+
+        for ind in range(num_intent):
+            state_dicts.append(self.intent_models[ind].state_dict())
+
+        for ind in range(3):
+            state_dicts.append(self.proposal_models[ind].state_dict())
+
+        state_dicts.append(self.marker_model.state_dict())
+
+        with open(outfolder + "state_dicts.pkl", 'wb') as fp:
+            pickle.dump(state_dicts, fp)
+
+    def load_model(self, infolder='models/deepqlearning/'):
+        with open(infolder + "hyperparameters.pkl", 'rb') as fp:
             indict = pickle.load(fp)
 
-        self.state_space_dim                = indict['state_space_dim']
-        self.state_action_visit_counts      = indict['state_action_visit_counts']
-        self.utility_space                  = indict['utility_space']
-        self.marker_action_visit_counts     = indict['marker_action_visit_counts']
-        self.marker_utility_space           = indict['marker_utility_space']
+        self.state_space_onehot             = indict['state_space_onehot']
+        self.marker_space_onehot            = indict['marker_space_onehot']
         self.epsilon                        = indict['epsilon']
         self.marker_epsilon                 = indict['marker_epsilon']
-        self.alpha                          = indict['alpha']
-        self.marker_alpha                   = indict['marker_alpha']
         self.gamma                          = indict['gamma']
         self.marker_gamma                   = indict['marker_gamma']
+
+        with open(infolder + "state_dicts.pkl", 'rb') as fp:
+            indict = pickle.load(fp)
+
+        self.emotion_model.load_state_dict(indict[0])
+
+        for ind in range(num_intent):
+            self.intent_models[ind].load_state_dict(indict[ind+1])
+
+        for ind in range(3):
+            self.proposal_models[ind].load_state_dict(indict[ind+1+num_intent])
+
+        self.marker_model.load_state_dict(indict[1+num_intent+3])
 
     def start_conversation(self):
         self.history = None
