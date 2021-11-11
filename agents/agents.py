@@ -4,8 +4,10 @@ import numpy as np
 from scipy.sparse import csr_matrix
 import json
 import pickle
+import random
 from agent_utils import get_random_emotion, get_random_intent, choose_random_with_prob, normalize_prob
 from agent_utils import get_proposal_score, incomplete_proposal, switch_proposal_perspective, convert_proposal_to_arr
+from agent_utils import uct_score
 from dataloader import label_emotion, label_intent, num_emotion, num_intent, emotion_label_to_index, intent_label_to_index
 
 ### define agents
@@ -288,6 +290,7 @@ class AgentMCTS(AgentTabular):
         current_state = self.get_state_from_dict(input_dict)
         current_action = self.get_state_from_dict(output_dict)
         self.trial_visits.append((self.state_to_index(current_state), self.state_to_index(current_action)))
+        self.history = input_dict
 
     def step_active(self, input_dict, mode='eval'):
         if input_dict is None:
@@ -305,10 +308,14 @@ class AgentMCTS(AgentTabular):
                 marker_visits_arr = self.marker_action_visit_counts[acceptance_index]
                 marker_state_visit_count = self.marker_state_visit_counts[acceptance_index]
 
-                acceptance_score = marker_utility_arr[0] + self.marker_exploration_term*math.sqrt(math.log(marker_state_visit_count+1)/(marker_visits_arr[0]+1))
-                rejection_score = marker_utility_arr[1] + self.marker_exploration_term*math.sqrt(math.log(marker_state_visit_count+1)/(marker_visits_arr[1]+1))
+                if mode=='train':
+                    acceptance_score = uct_score(marker_utility_arr[0], self.marker_exploration_term, marker_state_visit_count, marker_visits_arr[0])
+                    rejection_score = uct_score(marker_utility_arr[1], self.marker_exploration_term, marker_state_visit_count, marker_visits_arr[1])
+                else:
+                    acceptance_score = marker_utility_arr[0]
+                    rejection_score = marker_utility_arr[1]
 
-                is_accepted = acceptance_score >= rejection_score
+                is_accepted = acceptance_score > rejection_score
                 if mode == 'train':
                     self.marker_visits.append((acceptance_index, int(is_accepted)))
 
@@ -334,7 +341,7 @@ class AgentMCTS(AgentTabular):
         indices = indices[1]
 
         all_indices = set(range(np.prod(self.state_space_dim)))
-        exploration_indices = np.random.choice(list(all_indices - set(indices)), size=10)
+        exploration_indices = np.random.choice(list(all_indices - set(indices)), size=100)
 
         indices = np.concatenate((indices, exploration_indices))
 
@@ -344,7 +351,7 @@ class AgentMCTS(AgentTabular):
             utility_value = utility_arr[0, ind]
             visits_count = visits_arr[0, ind]
             if mode == 'train':
-                score = utility_value + self.exploration_term*math.sqrt(math.log(state_visit_count+1)/(visits_count+1))
+                score = uct_score(utility_value, self.exploration_term, state_visit_count, visits_count)
             else:
                 score = utility_value
             if score == best_score:
@@ -378,11 +385,6 @@ class AgentMCTS(AgentTabular):
             self.marker_state_visit_counts[ele[0], 0] += 1
             self.marker_action_visit_counts[ele[0], ele[1]] += 1
             self.marker_utility_space[ele[0], ele[1]] += reward
-
-    def set_priority(self, priorities):
-        sort_by = ["High", "Medium", "Low"]
-        priorities = {k: priorities[k] for k in sort_by}
-        self.priorities = priorities
 
     def get_state_from_dict(self, inpdict):
         state = []
@@ -463,10 +465,9 @@ class AgentMCTS(AgentTabular):
         self.marker_visits = []
         return
 
-### MCTS Agent
+### Q Learning Agent
 class AgentQLearning(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         super().__init__(score_weightage, length_penalty, id)
         state_space = []
         state_space.append(num_emotion) ## For emotions
@@ -475,11 +476,9 @@ class AgentQLearning(AgentTabular):
         self.state_space_dim = state_space
 
         state_space_size = np.prod(self.state_space_dim)
-        self.state_visit_counts = csr_matrix((state_space_size, 1))
         self.state_action_visit_counts = csr_matrix((state_space_size, state_space_size))
         self.utility_space = csr_matrix((state_space_size, state_space_size))
 
-        self.marker_state_visit_counts = np.zeros((4, 4, 4))
         self.marker_action_visit_counts = np.zeros((4, 4, 4, 2))
         self.marker_utility_space = np.zeros((4, 4, 4, 2))
 
@@ -487,11 +486,16 @@ class AgentQLearning(AgentTabular):
         self.marker_visits = []
         self.history = None
 
-        self.exploration_term = 1
-        self.marker_exploration_term = 1
+        self.epsilon = 0.1
+        self.marker_epsilon = 0.1
+
+        self.alpha = 0.1
+        self.marker_alpha = 0.1
+
+        self.gamma = 0.8
+        self.marker_gamma = 0.8
 
     def step_passive(self, input_dict, output_dict, mode='train'):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         if mode != 'train':
             ## We don't need to record history is agent is in evaluation mode
             return
@@ -502,9 +506,9 @@ class AgentQLearning(AgentTabular):
         current_state = self.get_state_from_dict(input_dict)
         current_action = self.get_state_from_dict(output_dict)
         self.trial_visits.append((self.state_to_index(current_state), self.state_to_index(current_action)))
+        self.history = input_dict
 
     def step_active(self, input_dict, mode='eval'):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         if input_dict is None:
             ## The case when the agent needs to speak first
             raise Exception("Input Dict was Empty. The Agents are not trained to start negotiations")
@@ -517,14 +521,17 @@ class AgentQLearning(AgentTabular):
                 acceptance_index = tuple(acceptance_arr)
 
                 marker_utility_arr = self.marker_utility_space[acceptance_index]
-                marker_visits_arr = self.marker_action_visit_counts[acceptance_index]
-                marker_state_visit_count = self.marker_state_visit_counts[acceptance_index]
 
-                acceptance_score = marker_utility_arr[0] + self.marker_exploration_term*math.sqrt(math.log(marker_state_visit_count+1)/(marker_visits_arr[0]+1))
-                rejection_score = marker_utility_arr[1] + self.marker_exploration_term*math.sqrt(math.log(marker_state_visit_count+1)/(marker_visits_arr[1]+1))
+                acceptance_score = marker_utility_arr[0]
+                rejection_score = marker_utility_arr[1]
 
-                is_accepted = acceptance_score >= rejection_score
-                if mode == 'train':
+                is_accepted = acceptance_score > rejection_score
+
+                if mode=="train":
+                    rand_prob = random.uniform(0, 1)
+                    if rand_prob < self.marker_epsilon:
+                        is_accepted = np.random.choice([True, False])
+
                     self.marker_visits.append((acceptance_index, int(is_accepted)))
 
                 if is_accepted:
@@ -543,34 +550,14 @@ class AgentQLearning(AgentTabular):
 
         utility_arr = self.utility_space[current_state_index, :]
         visits_arr = self.state_action_visit_counts[current_state_index, :]
-        state_visit_count = self.state_visit_counts[current_state_index, 0]
 
-        indices = visits_arr.nonzero()
-        indices = indices[1]
+        best_action = utility_arr.argmax()
 
-        all_indices = set(range(np.prod(self.state_space_dim)))
-        exploration_indices = np.random.choice(list(all_indices - set(indices)), size=10)
+        if mode=="train":
+            rand_prob = random.uniform(0, 1)
+            if rand_prob < self.epsilon:
+                best_action = np.random.choice(range(np.prod(self.state_space_dim)))
 
-        indices = np.concatenate((indices, exploration_indices))
-
-        best_score = -1e10
-        best_ind_arr = []
-        for ind in indices:
-            utility_value = utility_arr[0, ind]
-            visits_count = visits_arr[0, ind]
-            if mode == 'train':
-                score = utility_value + self.exploration_term*math.sqrt(math.log(state_visit_count+1)/(visits_count+1))
-            else:
-                score = utility_value
-            if score == best_score:
-                best_ind_arr.append(ind)
-            if score > best_score:
-                best_score = score
-                best_ind_arr = [ind]
-
-        best_action = np.random.choice(best_ind_arr)
-
-        if mode == 'train':
             self.trial_visits.append((current_state_index, best_action))
 
         output_dict = self.get_dict_from_state(self.index_to_state(best_action))
@@ -584,25 +571,15 @@ class AgentQLearning(AgentTabular):
         return output_dict
 
     def step_reward(self, reward):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
-        for ele in self.trial_visits:
-            self.state_visit_counts[ele[0], 0] += 1
-            self.state_action_visit_counts[ele[0], ele[1]] += 1
-            self.utility_space[ele[0], ele[1]] += reward
+        for e1, e2 in zip(self.trial_visits, self.trial_visits[1:]):
+            self.state_action_visit_counts[e1[0], e1[1]] += 1
+            self.utility_space[e1[0], e1[1]] += self.alpha*(reward + self.gamma*self.utility_space[e2[0]].max() - self.utility_space[e1[0], e1[1]])
 
-        for ele in self.marker_visits:
-            self.marker_state_visit_counts[ele[0], 0] += 1
-            self.marker_action_visit_counts[ele[0], ele[1]] += 1
-            self.marker_utility_space[ele[0], ele[1]] += reward
-
-    def set_priority(self, priorities):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
-        sort_by = ["High", "Medium", "Low"]
-        priorities = {k: priorities[k] for k in sort_by}
-        self.priorities = priorities
+        for e1, e2 in zip(self.marker_visits, self.marker_visits[1:]):
+            self.marker_action_visit_counts[e1[0], e1[1]] += 1
+            self.marker_utility_space[e1[0], e1[1]] += self.marker_alpha*(reward + self.marker_gamma*self.marker_utility_space[e2[0]].max() - self.utility_space[e1[0], e1[1]])
 
     def get_state_from_dict(self, inpdict):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         state = []
         state.append(inpdict['emotion'])
         state.extend(inpdict['intent'])
@@ -611,7 +588,6 @@ class AgentQLearning(AgentTabular):
         return state
 
     def get_dict_from_state(self, state):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         outdict = {}
         outdict['speaker_id'] = self.name
         outdict['text'] = 'MCTS Agent does not generate text.'
@@ -627,7 +603,6 @@ class AgentQLearning(AgentTabular):
         return outdict
 
     def state_to_index(self, state):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         index = 0
         mult = np.prod(self.state_space_dim)
         for ele, ref in zip(state, self.state_space_dim):
@@ -637,7 +612,6 @@ class AgentQLearning(AgentTabular):
         return index
 
     def index_to_state(self, index):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         state = []
         mult = np.prod(self.state_space_dim)
         for ref in self.state_space_dim:
@@ -647,38 +621,39 @@ class AgentQLearning(AgentTabular):
 
         return state
 
-    def save_model(self, outfile='models/mcts_v1.pkl'):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
+    def save_model(self, outfile='models/qlearning_v1.pkl'):
         outdict = {'state_space_dim'                : self.state_space_dim,
-                   'state_visit_counts'             : self.state_visit_counts,
                    'state_action_visit_counts'      : self.state_action_visit_counts,
                    'utility_space'                  : self.utility_space,
-                   'marker_state_visit_counts'      : self.marker_state_visit_counts,
                    'marker_action_visit_counts'     : self.marker_action_visit_counts,
                    'marker_utility_space'           : self.marker_utility_space,
-                   'exploration_term'               : self.exploration_term,
-                   'marker_exploration_term'        : self.marker_exploration_term}
+                   'epsilon'                        : self.epsilon,
+                   'marker_epsilon'                 : self.marker_epsilon,
+                   'alpha'                          : self.alpha,
+                   'marker_alpha'                   : self.marker_alpha,
+                   'gamma'                          : self.gamma,
+                   'marker_gamma'                   : self.marker_gamma}
 
         with open(outfile, 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='models/mcts_v1.pkl'):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
+    def load_model(self, infile='models/qlearning_v1.pkl'):
         with open(infile, 'rb') as fp:
             indict = pickle.load(fp)
 
         self.state_space_dim                = indict['state_space_dim']
-        self.state_visit_counts             = indict['state_visit_counts']
         self.state_action_visit_counts      = indict['state_action_visit_counts']
         self.utility_space                  = indict['utility_space']
-        self.marker_state_visit_counts      = indict['marker_state_visit_counts']
         self.marker_action_visit_counts     = indict['marker_action_visit_counts']
         self.marker_utility_space           = indict['marker_utility_space']
-        self.exploration_term               = indict['exploration_term']
-        self.marker_exploration_term        = indict['marker_exploration_term']
+        self.epsilon                        = indict['epsilon']
+        self.marker_epsilon                 = indict['marker_epsilon']
+        self.alpha                          = indict['alpha']
+        self.marker_alpha                   = indict['marker_alpha']
+        self.gamma                          = indict['gamma']
+        self.marker_gamma                   = indict['marker_gamma']
 
     def start_conversation(self):
-        #### NEED UPDATES!! CURRENTLY ONLY COPIED
         self.history = None
         self.priorities = None
         self.name = None

@@ -2,6 +2,7 @@ import random
 import json
 import numpy as np
 import copy
+import math
 # from parser import Parser
 
 def normalize_prob(prob_arr):
@@ -43,6 +44,9 @@ def switch_proposal_perspective(inpdict):
             outdict['proposal'][ele] = 3 - outdict['proposal'][ele]
 
     return outdict
+
+def uct_score(utility_value, exploration_term, state_visit_count, visits_count):
+    return utility_value + exploration_term*math.sqrt(math.log(state_visit_count+1)/(visits_count+1))
 
 def get_random_emotion():
     return random.randint(0, 5)
