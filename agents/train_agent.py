@@ -84,14 +84,15 @@ def train(agent1, agent2, mode=['eval', 'train']):
     rewards = [0, 0]
     ## Go through all the dialogues
     for i, (conversation, participant_info) in enumerate(all_data):
-        reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=0, mode=mode, length_limit=20)
-        rewards[0] += reward_tuple[0]
-        rewards[1] += reward_tuple[1]
         reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=1, mode=mode, length_limit=20)
         rewards[0] += reward_tuple[0]
         rewards[1] += reward_tuple[1]
+        # reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=1, mode=mode, length_limit=20)
+        # rewards[0] += reward_tuple[0]
+        # rewards[1] += reward_tuple[1]
         print("Rewards Agent 1", rewards[0])
         print("Rewards Agent 2", rewards[1])
+        # exit()
 
     ## save file
     if mode[0]=='train':
