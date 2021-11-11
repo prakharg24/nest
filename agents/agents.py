@@ -17,6 +17,7 @@ class AgentTabular():
         self.score_weightage = score_weightage
         self.length_penalty = length_penalty
         self.id = id
+        self.type = 'tabular'
 
     def set_priority(self, priorities):
         ## Important Assumption. We sort the priorities as high, medium and low which is relevant for certain parts of the code
@@ -60,6 +61,7 @@ class AgentDummy(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.conversation_count = 0
+        self.type = 'dummy'
 
     def step_passive(self, input_dict, output_dict, mode='train'):
         return_ind = None
@@ -92,6 +94,7 @@ class AgentDummy(AgentTabular):
 class AgentNoPlanningBayesian(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
+        self.type = 'bayesian'
         self.emotion_trans_count = np.zeros((num_emotion, num_emotion)) ## transition probability between emotions
         self.intent_trans_count = np.zeros((num_intent, 2, 2)) ## transition probability for each intent separately
         self.proposal_prevproposal_joint_count = {"High": np.zeros((4, 4)),
@@ -130,9 +133,9 @@ class AgentNoPlanningBayesian(AgentTabular):
     def step_active(self, input_dict, mode='eval'):
         if mode == 'train':
             ## Switch perspective since we are looking for other speaker's utterance
-            input_reveresed = switch_proposal_perspective(input_dict)
+            input_reversed = switch_proposal_perspective(input_dict)
             for ind, ele in enumerate(self.conversation):
-                if ele == input_reveresed:
+                if ele == input_reversed:
                     curr_dia = ind
                     break
             self.step_passive(input_dict, self.conversation[curr_dia+1], mode=mode)
@@ -257,6 +260,7 @@ class AgentNoPlanningBayesian(AgentTabular):
 class AgentMCTS(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
+        self.type = 'mcts'
         state_space = []
         state_space.append(num_emotion) ## For emotions
         state_space.extend([2 for _ in range(num_intent)]) ## For intent
@@ -315,7 +319,7 @@ class AgentMCTS(AgentTabular):
                     acceptance_score = marker_utility_arr[0]
                     rejection_score = marker_utility_arr[1]
 
-                is_accepted = acceptance_score > rejection_score
+                is_accepted = acceptance_score >= rejection_score
                 if mode == 'train':
                     self.marker_visits.append((acceptance_index, int(is_accepted)))
 
@@ -469,6 +473,7 @@ class AgentMCTS(AgentTabular):
 class AgentQLearning(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
+        self.type = 'qlearning'
         state_space = []
         state_space.append(num_emotion) ## For emotions
         state_space.extend([2 for _ in range(num_intent)]) ## For intent
@@ -573,11 +578,11 @@ class AgentQLearning(AgentTabular):
     def step_reward(self, reward):
         for e1, e2 in zip(self.trial_visits, self.trial_visits[1:]):
             self.state_action_visit_counts[e1[0], e1[1]] += 1
-            self.utility_space[e1[0], e1[1]] += self.alpha*(reward + self.gamma*self.utility_space[e2[0]].max() - self.utility_space[e1[0], e1[1]])
+            self.utility_space[e1[0], e1[1]] += self.alpha*(reward + self.gamma*self.utility_space[e2[0], :].max() - self.utility_space[e1[0], e1[1]])
 
         for e1, e2 in zip(self.marker_visits, self.marker_visits[1:]):
             self.marker_action_visit_counts[e1[0], e1[1]] += 1
-            self.marker_utility_space[e1[0], e1[1]] += self.marker_alpha*(reward + self.marker_gamma*self.marker_utility_space[e2[0]].max() - self.utility_space[e1[0], e1[1]])
+            self.marker_utility_space[e1[0], e1[1]] += self.marker_alpha*(reward + self.marker_gamma*self.marker_utility_space[e2[0], :].max() - self.marker_utility_space[e1[0], e1[1]])
 
     def get_state_from_dict(self, inpdict):
         state = []

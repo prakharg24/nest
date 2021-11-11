@@ -1,5 +1,5 @@
 from dataloader import get_dataset
-from agents import AgentNoPlanningBayesian, AgentDummy, AgentMCTS
+from agents import AgentNoPlanningBayesian, AgentDummy, AgentMCTS, AgentQLearning
 from agent_utils import switch_proposal_perspective, get_proposal_score
 
 import copy
@@ -55,13 +55,13 @@ def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, len
             break
         out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog), mode=mode[act_ag])
         record_conversation.append(out_dialog)
-        # print(out_dialog)
         if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
             break
         conv_length += 1
         act_ag = (act_ag+1)%2
         prev_dialog = out_dialog
 
+    # print(record_conversation)
     reward_tuple = [0, 0]
     if out_dialog['text']=='Accept-Deal' and prev_dialog['proposal'] is not None:
         conv_length_penalty = length_penalty*conv_length
@@ -84,12 +84,12 @@ def train(agent1, agent2, mode=['eval', 'train']):
     rewards = [0, 0]
     ## Go through all the dialogues
     for i, (conversation, participant_info) in enumerate(all_data):
+        reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=0, mode=mode, length_limit=20)
+        rewards[0] += reward_tuple[0]
+        rewards[1] += reward_tuple[1]
         reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=1, mode=mode, length_limit=20)
         rewards[0] += reward_tuple[0]
         rewards[1] += reward_tuple[1]
-        # reward_tuple = agent_negotiation([agent1, agent2], copy.deepcopy(conversation), participant_info, act_ag=1, mode=mode, length_limit=20)
-        # rewards[0] += reward_tuple[0]
-        # rewards[1] += reward_tuple[1]
         print("Rewards Agent 1", rewards[0])
         print("Rewards Agent 2", rewards[1])
         # exit()
@@ -101,7 +101,7 @@ def train(agent1, agent2, mode=['eval', 'train']):
         agent2.save_model()
 
 if __name__ == "__main__":
-    training_setup = 1
+    training_setup = 5
     if training_setup==1:
         agent1 = AgentDummy(score_weightage, length_penalty, 0)
         agent2 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
@@ -120,5 +120,17 @@ if __name__ == "__main__":
         agent1 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
         agent1.load_model()
         agent2 = AgentMCTS(score_weightage, length_penalty, 0)
+        agent2.load_model()
+        train(agent1, agent2, mode=['eval', 'eval'])
+    elif training_setup==5:
+        # agent1 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+        agent1 = AgentMCTS(score_weightage, length_penalty, 0)
+        agent1.load_model()
+        agent2 = AgentQLearning(score_weightage, length_penalty, 0)
+        train(agent1, agent2, mode=['eval', 'train'])
+    elif training_setup==6:
+        agent1 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+        agent1.load_model()
+        agent2 = AgentQLearning(score_weightage, length_penalty, 0)
         agent2.load_model()
         train(agent1, agent2, mode=['eval', 'eval'])

@@ -59,6 +59,81 @@ def get_chunks(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
+
+def break_conversation(conversation):
+    return conversation[:4], conversation[4:]
+
+def agent_negotiation(agent_tuple, conversation, participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20, mode=['train', 'train']):
+    ## Bayesian Model Needs to run in eval state
+    if agent_tuple[0].type == 'bayesian':
+        mode[0] = 'eval'
+    if agent_tuple[1].type == 'bayesian':
+        mode[1] = 'eval'
+
+    record_conversation = []
+
+    ## Reset Agent State if required at the start of conversation
+    agent_tuple[act_ag].start_conversation()
+    agent_tuple[(act_ag+1)%2].start_conversation()
+
+    ## Setup Agent's priority
+    ## Assumption here that the first person doesn't speak twice in a row at the start
+    agent1_id = conversation[0]['speaker_id']
+    agent_tuple[act_ag].set_priority(participant_info[agent1_id]['value2issue'])
+    agent_tuple[act_ag].set_name(agent1_id)
+
+    agent2_id = conversation[1]['speaker_id']
+    agent_tuple[(act_ag+1)%2].set_priority(participant_info[agent2_id]['value2issue'])
+    agent_tuple[(act_ag+1)%2].set_name(agent2_id)
+
+    ## Certain agents require complete conversation for training
+    agent_tuple[act_ag].set_conversation(conversation)
+    agent_tuple[(act_ag+1)%2].set_conversation(conversation)
+
+    conv_prefix, conv_suffix = break_conversation(conversation)
+
+    conv_length = 0
+
+    ## We are working under the assumption that passive steps won't include markers
+    record_conversation.append(conv_prefix[0])
+    agent_tuple[act_ag].step_passive(None, conv_prefix[0], mode=mode[act_ag])
+    act_ag = (act_ag+1)%2
+    conv_length += 1
+
+    for dia, dia_next in zip(conv_prefix, conv_prefix[1:]):
+        record_conversation.append(dia_next)
+        agent_tuple[act_ag].step_passive(switch_proposal_perspective(dia), dia_next, mode=mode[act_ag])
+        act_ag = (act_ag+1)%2
+        conv_length += 1
+
+    prev_dialog = conv_prefix[-1]
+    while True:
+        if(conv_length > length_limit):
+            break
+        out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog), mode=mode[act_ag])
+        record_conversation.append(out_dialog)
+        if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
+            break
+        conv_length += 1
+        act_ag = (act_ag+1)%2
+        prev_dialog = out_dialog
+
+    # print(record_conversation)
+    reward_tuple = [0, 0]
+    if out_dialog['text']=='Accept-Deal' and prev_dialog['proposal'] is not None:
+        conv_length_penalty = length_penalty*conv_length
+
+        reward_tuple[(act_ag+1)%2] = get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - conv_length_penalty
+
+        prev_dialog_reverted = switch_proposal_perspective(prev_dialog)
+        reward_tuple[act_ag] = get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage) - conv_length_penalty
+
+    # if(reward_tuple[0]!=reward_tuple[1]):
+    agent_tuple[0].step_reward(reward_tuple[0])
+    agent_tuple[1].step_reward(reward_tuple[1])
+
+    return reward_tuple
+
 class NegotiationStarter():
     def __init__(self, datafile):
         self.parser = Parser(debug_mode=True)
