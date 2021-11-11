@@ -1,6 +1,7 @@
 import random
 import json
 import numpy as np
+import copy
 # from parser import Parser
 
 def normalize_prob(prob_arr):
@@ -32,15 +33,16 @@ def convert_proposal_to_arr(proposal, priorities):
     return [proposal[priorities["High"]], proposal[priorities["Medium"]], proposal[priorities["Low"]]]
 
 def switch_proposal_perspective(inpdict):
-    if inpdict is None:
-        return inpdict
-    if inpdict['proposal'] is None:
-        return inpdict
-    for ele in inpdict['proposal']:
-        if (inpdict['proposal'][ele]!=-1):
-            inpdict['proposal'][ele] = 3 - inpdict['proposal'][ele]
+    outdict = copy.deepcopy(inpdict)
+    if outdict is None:
+        return outdict
+    if outdict['proposal'] is None:
+        return outdict
+    for ele in outdict['proposal']:
+        if (outdict['proposal'][ele]!=-1):
+            outdict['proposal'][ele] = 3 - outdict['proposal'][ele]
 
-    return inpdict
+    return outdict
 
 def get_random_emotion():
     return random.randint(0, 5)

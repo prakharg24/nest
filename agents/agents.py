@@ -128,9 +128,9 @@ class AgentNoPlanningBayesian(AgentTabular):
     def step_active(self, input_dict, mode='eval'):
         if mode == 'train':
             ## Switch perspective since we are looking for other speaker's utterance
-            input_dict = switch_proposal_perspective(input_dict)
+            input_reveresed = switch_proposal_perspective(input_dict)
             for ind, ele in enumerate(self.conversation):
-                if ele == input_dict:
+                if ele == input_reveresed:
                     curr_dia = ind
                     break
             self.step_passive(input_dict, self.conversation[curr_dia+1], mode=mode)
@@ -309,7 +309,8 @@ class AgentMCTS(AgentTabular):
                 rejection_score = marker_utility_arr[1] + self.marker_exploration_term*math.sqrt(math.log(marker_state_visit_count+1)/(marker_visits_arr[1]+1))
 
                 is_accepted = acceptance_score >= rejection_score
-                self.marker_visits.append((acceptance_index, int(is_accepted)))
+                if mode == 'train':
+                    self.marker_visits.append((acceptance_index, int(is_accepted)))
 
                 if is_accepted:
                     return {'speaker_id' : self.name, 'text' : 'Accept-Deal', 'is_marker' : True,
@@ -342,7 +343,10 @@ class AgentMCTS(AgentTabular):
         for ind in indices:
             utility_value = utility_arr[0, ind]
             visits_count = visits_arr[0, ind]
-            score = utility_value + self.exploration_term*math.sqrt(math.log(state_visit_count+1)/(visits_count+1))
+            if mode == 'train':
+                score = utility_value + self.exploration_term*math.sqrt(math.log(state_visit_count+1)/(visits_count+1))
+            else:
+                score = utility_value
             if score == best_score:
                 best_ind_arr.append(ind)
             if score > best_score:
@@ -351,7 +355,8 @@ class AgentMCTS(AgentTabular):
 
         best_action = np.random.choice(best_ind_arr)
 
-        self.trial_visits.append((current_state_index, best_action))
+        if mode == 'train':
+            self.trial_visits.append((current_state_index, best_action))
 
         output_dict = self.get_dict_from_state(self.index_to_state(best_action))
 
@@ -421,13 +426,33 @@ class AgentMCTS(AgentTabular):
 
         return state
 
-    def save_model(self, outfile='some_fixed_file.pt'):
-        ## Save the model parameters/dict etc. so that it can be easily laoded
-        return
+    def save_model(self, outfile='models/mcts_v1.pkl'):
+        outdict = {'state_space_dim'                : self.state_space_dim,
+                   'state_visit_counts'             : self.state_visit_counts,
+                   'state_action_visit_counts'      : self.state_action_visit_counts,
+                   'utility_space'                  : self.utility_space,
+                   'marker_state_visit_counts'      : self.marker_state_visit_counts,
+                   'marker_action_visit_counts'     : self.marker_action_visit_counts,
+                   'marker_utility_space'           : self.marker_utility_space,
+                   'exploration_term'               : self.exploration_term,
+                   'marker_exploration_term'        : self.marker_exploration_term}
 
-    def load_model(self, infile='some_fixed_file.pt'):
-        ## load the model parameters back
-        return
+        with open(outfile, 'wb') as fp:
+            pickle.dump(outdict, fp)
+
+    def load_model(self, infile='models/mcts_v1.pkl'):
+        with open(infile, 'rb') as fp:
+            indict = pickle.load(fp)
+
+        self.state_space_dim                = indict['state_space_dim']
+        self.state_visit_counts             = indict['state_visit_counts']
+        self.state_action_visit_counts      = indict['state_action_visit_counts']
+        self.utility_space                  = indict['utility_space']
+        self.marker_state_visit_counts      = indict['marker_state_visit_counts']
+        self.marker_action_visit_counts     = indict['marker_action_visit_counts']
+        self.marker_utility_space           = indict['marker_utility_space']
+        self.exploration_term               = indict['exploration_term']
+        self.marker_exploration_term        = indict['marker_exploration_term']
 
     def start_conversation(self):
         self.history = None

@@ -13,6 +13,8 @@ def break_conversation(conversation):
     return conversation[:4], conversation[4:]
 
 def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, length_limit=20, mode=['train', 'train']):
+    record_conversation = []
+
     ## Reset Agent State if required at the start of conversation
     agent_tuple[act_ag].start_conversation()
     agent_tuple[(act_ag+1)%2].start_conversation()
@@ -36,11 +38,13 @@ def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, len
     conv_length = 0
 
     ## We are working under the assumption that passive steps won't include markers
+    record_conversation.append(conv_prefix[0])
     agent_tuple[act_ag].step_passive(None, conv_prefix[0], mode=mode[act_ag])
     act_ag = (act_ag+1)%2
     conv_length += 1
 
     for dia, dia_next in zip(conv_prefix, conv_prefix[1:]):
+        record_conversation.append(dia_next)
         agent_tuple[act_ag].step_passive(switch_proposal_perspective(dia), dia_next, mode=mode[act_ag])
         act_ag = (act_ag+1)%2
         conv_length += 1
@@ -50,6 +54,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, len
         if(conv_length > length_limit):
             break
         out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog), mode=mode[act_ag])
+        record_conversation.append(out_dialog)
         # print(out_dialog)
         if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
             break
@@ -58,7 +63,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, len
         prev_dialog = out_dialog
 
     reward_tuple = [0, 0]
-    if prev_dialog['proposal'] is not None:
+    if out_dialog['text']=='Accept-Deal' and prev_dialog['proposal'] is not None:
         conv_length_penalty = length_penalty*conv_length
 
         reward_tuple[(act_ag+1)%2] = get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - conv_length_penalty
@@ -66,6 +71,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, len
         prev_dialog_reverted = switch_proposal_perspective(prev_dialog)
         reward_tuple[act_ag] = get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage) - conv_length_penalty
 
+    # if(reward_tuple[0]!=reward_tuple[1]):
     agent_tuple[0].step_reward(reward_tuple[0])
     agent_tuple[1].step_reward(reward_tuple[1])
 
@@ -88,11 +94,13 @@ def train(agent1, agent2, mode=['eval', 'train']):
         print("Rewards Agent 2", rewards[1])
 
     ## save file
-    agent1.save_model()
-    agent2.save_model()
+    if mode[0]=='train':
+        agent1.save_model()
+    if mode[1]=='train':
+        agent2.save_model()
 
 if __name__ == "__main__":
-    training_setup = 3
+    training_setup = 1
     if training_setup==1:
         agent1 = AgentDummy(score_weightage, length_penalty, 0)
         agent2 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
@@ -107,3 +115,9 @@ if __name__ == "__main__":
         agent1.load_model()
         agent2 = AgentMCTS(score_weightage, length_penalty, 0)
         train(agent1, agent2, mode=['eval', 'train'])
+    elif training_setup==4:
+        agent1 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+        agent1.load_model()
+        agent2 = AgentMCTS(score_weightage, length_penalty, 0)
+        agent2.load_model()
+        train(agent1, agent2, mode=['eval', 'eval'])
