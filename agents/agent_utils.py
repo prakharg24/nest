@@ -15,8 +15,8 @@ def choose_random_with_prob(arr, prob):
 
 def get_proposal_score(priorities, proposal, score_weightage):
     final_score = 0
-    for ele in proposal:
-        final_score += score_weightage[priorities[ele]]*proposal[ele]
+    for ele in priorities:
+        final_score += score_weightage[ele]*proposal[priorities[ele]]
 
     return final_score
 

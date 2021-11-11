@@ -232,3 +232,73 @@ class AgentNoPlanningBayesian(AgentTabular):
         self.priorities = None
         self.name = None
         self.conversation = None
+
+
+class AgentMCTS(AgentTabular):
+    def __init__(self, score_weightage, length_penalty, id):
+        super().__init__(score_weightage, length_penalty, id)
+        self.utility_space = np.zeros((num_emotion, num_intent, 2, 4, 4, 4))
+        self.visit_counts = np.ones((num_emotion, num_intent, 2, 4, 4, 4))
+        self.trial_visits = []
+        self.history = None
+
+    def step_active(self, input_dict, mode='eval'):
+        ### Skeleton Function. Inherit this and change to return some sensible proposal
+        return input_dict
+
+    def step_passive(self, input_dict, output_dict, mode='train'):
+        if mode != 'train':
+            ## No history saving required in the eval mode
+            return
+        if input_dict is None:
+            ## Just the first spoken dialogue. Skip
+            return
+
+        if input_dict['is_marker'] or output_dict['is_marker']:
+            ## Marker sentences.
+            if input_dict['text']=='Submit-Deal' and output_dict['text']=='Accept-Deal':
+                ## The submitted deal will not contain a -1
+                high_index = input_dict['proposal'][self.priorities["High"]]
+                medium_index = input_dict['proposal'][self.priorities["Medium"]]
+                low_index = input_dict['proposal'][self.priorities["Low"]]
+                self.acceptance_count[high_index, medium_index, low_index] += 1
+            return
+
+        self.set_emotion_counts(input_dict, output_dict)
+        self.set_intent_counts(input_dict, output_dict)
+        self.set_proposal_counts(input_dict, output_dict)
+        return
+
+    def set_priority(self, priorities):
+        sort_by = ["High", "Medium", "Low"]
+        priorities = {k: priorities[k] for k in sort_by}
+        self.priorities = priorities
+        self.fill_heuristic_utility()
+
+    def fill_heuristic_utility(self):
+        it = np.nditer(self.utility_space, flags=['multi_index'], op_flags=['readwrite'])
+        for ele in it:
+            curr_ind = it.multi_index
+            proposal = {}
+            proposal[self.priorities["High"]] = curr_ind[3]
+            proposal[self.priorities["Medium"]] = curr_ind[4]
+            proposal[self.priorities["Low"]] = curr_ind[5]
+
+            score = get_proposal_score(self.priorities, proposal, self.score_weightage)
+            ele[...] = score
+
+    def save_model(self, outfile='some_fixed_file.pt'):
+        ## Save the model parameters/dict etc. so that it can be easily laoded
+        return
+
+    def load_model(self, infile='some_fixed_file.pt'):
+        ## load the model parameters back
+        return
+
+    def start_conversation(self):
+        self.history = None
+        self.priorities = None
+        self.name = None
+        self.conversation = None
+        self.trial_visits = []
+        return

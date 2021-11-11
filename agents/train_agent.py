@@ -1,5 +1,5 @@
 from dataloader import get_dataset
-from agents import AgentNoPlanningBayesian, AgentDummy
+from agents import AgentNoPlanningBayesian, AgentDummy, AgentMCTS
 from agent_utils import switch_proposal_perspective
 
 import copy
@@ -9,18 +9,18 @@ random.seed(62)
 def break_conversation(conversation):
     return conversation[:4], conversation[4:]
 
-def agent_negotiation(agent_tuple, conversation, act_ag=0, length_limit=20, mode='train'):
+def agent_negotiation(agent_tuple, conversation, act_ag=0, length_limit=20, mode=['train', 'train']):
     conv_prefix, conv_suffix = break_conversation(conversation)
 
     conv_length = 0
 
     ## We are working under the assumption that passive steps won't include markers
-    agent_tuple[act_ag].step_passive(None, conv_prefix[0], mode=mode)
+    agent_tuple[act_ag].step_passive(None, conv_prefix[0], mode=mode[act_ag])
     act_ag = (act_ag+1)%2
     conv_length += 1
 
     for dia, dia_next in zip(conv_prefix, conv_prefix[1:]):
-        agent_tuple[act_ag].step_passive(switch_proposal_perspective(dia), dia_next, mode=mode)
+        agent_tuple[act_ag].step_passive(switch_proposal_perspective(dia), dia_next, mode=mode[act_ag])
         act_ag = (act_ag+1)%2
         conv_length += 1
 
@@ -28,7 +28,7 @@ def agent_negotiation(agent_tuple, conversation, act_ag=0, length_limit=20, mode
     while True:
         if(conv_length > length_limit):
             break
-        out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog), mode=mode)
+        out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog), mode=mode[act_ag])
         if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
             break
         conv_length += 1
@@ -40,7 +40,7 @@ def agent_negotiation(agent_tuple, conversation, act_ag=0, length_limit=20, mode
 
 def train(agent1, agent2):
     ## Load Dataset
-    all_data = get_dataset('../casino_with_emotions.json', shuffle=True)
+    all_data = get_dataset('../casino_with_emotions_and_intents.json', shuffle=True)
 
     ## Go through all the dialogues
     for i, (conversation, participant_info) in enumerate(all_data):
@@ -62,9 +62,9 @@ def train(agent1, agent2):
         agent1.set_conversation(conversation)
         agent2.set_conversation(conversation)
 
-        agent_negotiation([agent1, agent2], copy.deepcopy(conversation), act_ag=0, mode='train', length_limit=20)
+        agent_negotiation([agent1, agent2], copy.deepcopy(conversation), act_ag=0, mode=['eval', 'train'], length_limit=20)
         ## Repeat the negotiation again but with reversed roles
-        agent_negotiation([agent1, agent2], copy.deepcopy(conversation), act_ag=1, mode='train', length_limit=20)
+        agent_negotiation([agent1, agent2], copy.deepcopy(conversation), act_ag=1, mode=['eval', 'train'], length_limit=20)
 
     ## save file
     agent1.save_model()
@@ -73,6 +73,8 @@ def train(agent1, agent2):
 if __name__ == "__main__":
     score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
     length_penalty = 0.5
-    agent1 = AgentDummy(score_weightage, length_penalty, 0)
-    agent2 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+    # agent1 = AgentDummy(score_weightage, length_penalty, 0)
+    agent1 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
+    agent2 = AgentMCTS(score_weightage, length_penalty, 0)
+    agent1.load_model()
     train(agent1, agent2)

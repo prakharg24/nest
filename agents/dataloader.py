@@ -16,6 +16,8 @@ def emotion_label_to_index(label):
 
 def intent_label_to_index(labels):
     empty_array = [0 for _ in range(num_intent)]
+    if labels=='':
+        return empty_array
     labels = labels.split(",")
     for lbl in labels:
         empty_array[intent_revdict[lbl]] = 1
