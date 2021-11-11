@@ -5,6 +5,12 @@ import copy
 import math
 # from parser import Parser
 
+def index_to_onehot(index, size):
+    outarr = [0 for _ in range(size)]
+    outarr[index] = 1
+
+    return outarr
+
 def normalize_prob(prob_arr):
     if np.sum(prob_arr)!=0:
         return prob_arr/np.sum(prob_arr)
@@ -63,12 +69,7 @@ def get_chunks(lst, n):
 def break_conversation(conversation):
     return conversation[:4], conversation[4:]
 
-def agent_negotiation(agent_tuple, conversation, participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20, mode=['train', 'train']):
-    ## Bayesian Model Needs to run in eval state
-    if agent_tuple[0].type == 'bayesian':
-        mode[0] = 'eval'
-    if agent_tuple[1].type == 'bayesian':
-        mode[1] = 'eval'
+def agent_negotiation(agent_tuple, conversation, participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20):
 
     record_conversation = []
 
@@ -96,13 +97,13 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_penalt
 
     ## We are working under the assumption that passive steps won't include markers
     record_conversation.append(conv_prefix[0])
-    agent_tuple[act_ag].step_passive(None, conv_prefix[0], mode=mode[act_ag])
+    agent_tuple[act_ag].step_passive(None, conv_prefix[0])
     act_ag = (act_ag+1)%2
     conv_length += 1
 
     for dia, dia_next in zip(conv_prefix, conv_prefix[1:]):
         record_conversation.append(dia_next)
-        agent_tuple[act_ag].step_passive(switch_proposal_perspective(dia), dia_next, mode=mode[act_ag])
+        agent_tuple[act_ag].step_passive(switch_proposal_perspective(dia), dia_next)
         act_ag = (act_ag+1)%2
         conv_length += 1
 
@@ -110,7 +111,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_penalt
     while True:
         if(conv_length > length_limit):
             break
-        out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog), mode=mode[act_ag])
+        out_dialog = agent_tuple[act_ag].step_active(switch_proposal_perspective(prev_dialog))
         record_conversation.append(out_dialog)
         if(out_dialog['text']=='Accept-Deal' or out_dialog['text']=='Walk-Away'):
             break
