@@ -79,7 +79,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, act_ag=0, len
 
 def train(agent1, agent2):
     ## Load Dataset
-    all_data = get_dataset('../casino_with_emotions_and_intents.json', shuffle=True)
+    all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json', shuffle=True)
 
     rewards = [0, 0]
     ## Go through all the dialogues

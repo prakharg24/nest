@@ -16,7 +16,7 @@ length_limit = 20
 
 num_rounds = 2
 
-all_data = get_dataset('../casino_with_emotions_and_intents.json')
+all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json')
 
 ### Initialize and Collect all agents to take part in the negotiations
 agent_list = []
