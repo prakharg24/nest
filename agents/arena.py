@@ -13,6 +13,7 @@ priorities = ["Low", "Medium", "High"]
 score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
 length_penalty = 0.5
 length_limit = 20
+fp_scaling_factor = 0.1
 
 num_rounds = 2
 
@@ -66,7 +67,7 @@ for round in range(num_rounds):
         conv_ind = np.random.choice(range(len(all_data)))
         (conversation, participant_info) = all_data[conv_ind]
 
-        reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20)
+        reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20, fp_scaling_factor=0.1)
         agent_scores[agent_tuple[0].id] += reward_tuple[0]
         agent_scores[agent_tuple[1].id] += reward_tuple[1]
 

@@ -69,7 +69,7 @@ def get_chunks(lst, n):
 def break_conversation(conversation):
     return conversation[:4], conversation[4:]
 
-def agent_negotiation(agent_tuple, conversation, participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20):
+def agent_negotiation(agent_tuple, conversation, participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20, fp_scaling_factor=0.1):
 
     record_conversation = []
 
@@ -123,11 +123,14 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_penalt
     reward_tuple = [0, 0]
     if out_dialog['text']=='Accept-Deal' and prev_dialog['proposal'] is not None:
         conv_length_penalty = length_penalty*conv_length
-
-        reward_tuple[(act_ag+1)%2] = get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - conv_length_penalty
-
         prev_dialog_reverted = switch_proposal_perspective(prev_dialog)
-        reward_tuple[act_ag] = get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage) - conv_length_penalty
+        
+        agent_fairness_penalty = fp_scaling_factor * abs(get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage))
+
+        reward_tuple[(act_ag+1)%2] = get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - conv_length_penalty - agent_fairness_penalty
+
+        
+        reward_tuple[act_ag] = get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage) - conv_length_penalty - agent_fairness_penalty
 
     # if(reward_tuple[0]!=reward_tuple[1]):
     agent_tuple[0].step_reward(reward_tuple[0])
