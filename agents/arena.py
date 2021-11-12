@@ -15,8 +15,8 @@ length_penalty = 0.5
 length_limit = 20
 fp_scaling_factor = 0.1
 
-num_rounds = 2
-num_rounds_test = 2
+num_rounds = 5
+num_rounds_test = 5
 
 all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json')
 
@@ -112,3 +112,11 @@ for round in range(num_rounds_test):
 agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: item[1])}
 print("Final Testing Scores")
 print(agent_scores)
+
+for i in range(5):
+    local_agent_score_arr = []
+    for j in range(10):
+        ind = 10*i + j
+        local_agent_score_arr.append(agent_scores[ind])
+    print(local_agent_score_arr)
+    print(np.mean(local_agent_score_arr), np.std(local_agent_score_arr))

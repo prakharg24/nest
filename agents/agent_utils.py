@@ -124,12 +124,12 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_penalt
     if out_dialog['text']=='Accept-Deal' and prev_dialog['proposal'] is not None:
         conv_length_penalty = length_penalty*conv_length
         prev_dialog_reverted = switch_proposal_perspective(prev_dialog)
-        
+
         agent_fairness_penalty = fp_scaling_factor * abs(get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage))
 
         reward_tuple[(act_ag+1)%2] = get_proposal_score(agent_tuple[(act_ag+1)%2].priorities, prev_dialog['proposal'], score_weightage) - conv_length_penalty - agent_fairness_penalty
 
-        
+
         reward_tuple[act_ag] = get_proposal_score(agent_tuple[act_ag].priorities, prev_dialog_reverted['proposal'], score_weightage) - conv_length_penalty - agent_fairness_penalty
 
     # if(reward_tuple[0]!=reward_tuple[1]):
@@ -137,81 +137,3 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_penalt
     agent_tuple[1].step_reward(reward_tuple[1])
 
     return reward_tuple
-
-class NegotiationStarter():
-    def __init__(self, datafile):
-        self.parser = Parser(debug_mode=True)
-        full_conversations = self.load_dialogues_json(datafile)
-        self.conversations = []
-        for ele in full_conversations:
-            prefix_conv = self.cut_conversation_prefix(ele[0])
-            if prefix_conv is not None:
-                self.conversations.append((prefix_conv, ele[1]))
-
-    def load_dialogues_json(self, fname):
-        conversations = []
-
-        data = json.load(open(fname))
-        extra_utterances = ['Submit-Deal', 'Accept-Deal', 'Reject-Deal', 'Walk-Away', 'Submit-Post-Survey']
-        for ind, item in enumerate(data):
-            if 'proposals' not in item:
-                continue
-
-            dialogues = []
-            proposal_dict = self.local_proposal_dict(item['proposals'])
-            complete_log = item['chat_logs']
-            participant_info = item['participant_info']
-            for i, utterance in enumerate(complete_log):
-                ## Assumption, the dialogue loader will never account for markers like submit-deal, reject-deal, accept-deal etc.
-                if utterance['text'] in extra_utterances:
-                    break
-
-                parse_data = self.parser.parse(utterance['text'])
-                proposal_data = proposal_dict[utterance['text']]
-
-                dialogues.append({'speaker_id': utterance['id'],
-                                  'emotion': parse_data['emotion'],
-                                  'intent': parse_data['intent'],
-                                  'proposal': proposal_data})
-
-            if len(dialogues) > 5:
-                conversations.append((dialogues, participant_info))
-
-        return conversations
-
-    def local_proposal_dict(self, proposal_array):
-        outdict = {}
-        for ele in proposal_array:
-            outdict[ele[0]] = {'Firewood': int(ele[1][0]), 'Water': int(ele[1][1]), 'Food': int(ele[1][2])}
-
-        return outdict
-
-    def cut_conversation_prefix(self, conversation):
-        end_index = -1
-        for ite, dialogue in enumerate(conversation):
-            ## Check if some preference has been elicited
-            if (dialogue['proposal']['Firewood']!=-1 or dialogue['proposal']['Water']!=-1 or dialogue['proposal']['Food']!=-1):
-                end_index = ite
-                break
-
-        if end_index==-1:
-            return None
-        elif end_index < 2:
-            return conversation[:2]
-        else:
-            return conversation[:(end_index+1)]
-
-    def get_all_agents_and_priorities(self, conversation):
-        agent_dict = {}
-        for ele in conversation[0]:
-            if ele['speaker_id'] not in agent_dict:
-                participant_info = conversation[1][ele['speaker_id']]['value2issue']
-                agent_dict[ele['speaker_id']] = {participant_info[k]:k for k in participant_info}
-
-        return agent_dict
-
-    def get_random_negotiation_prefix(self):
-        conversation = random.choice(self.conversations)
-        agents = self.get_all_agents_and_priorities(conversation)
-
-        return conversation[0], agents
