@@ -17,7 +17,7 @@ fp_scaling_factor = 0.1
 
 num_rounds = 2
 
-all_data = get_dataset('../casino_with_emotions_and_intents.json')
+all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json')
 
 ### Initialize and Collect all agents to take part in the negotiations
 agent_list = []
@@ -29,6 +29,12 @@ agent_id_counter = 0
 
 for i in range(10):
     agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
+    agent_list[-1].load_model()
+    agent_list[-1].set_mode('eval')
+    agent_id_counter += 1
+
+for i in range(10):
+    agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
     agent_list[-1].load_model()
     agent_list[-1].set_mode('eval')
     agent_id_counter += 1
