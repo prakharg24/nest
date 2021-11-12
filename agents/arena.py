@@ -33,6 +33,12 @@ for i in range(10):
     agent_id_counter += 1
 
 for i in range(10):
+    agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
+    agent_list[-1].load_model()
+    agent_list[-1].set_mode('eval')
+    agent_id_counter += 1
+
+for i in range(10):
     agent_list.append(AgentMCTS(score_weightage, length_penalty, agent_id_counter))
     # agent_list[-1].load_model()
     agent_list[-1].set_mode('train')
