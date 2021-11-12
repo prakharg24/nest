@@ -200,7 +200,14 @@ class AgentNoPlanningBayesian(AgentTabular):
 
         self.history = input_dict
 
-        if input_dict['proposal'] == out_proposal_dict and not incomplete_proposal(input_dict['proposal']):
+        input_prop_score = get_proposal_score(self.priorities, input_dict['proposal'], self.score_weightage)
+        out_prop_score = get_proposal_score(self.priorities, out_proposal_dict, self.score_weightage)
+
+        # if input_dict['proposal'] == out_proposal_dict and not incomplete_proposal(input_dict['proposal']):
+        #     ## It seems liek something has been agreed upon. Submit a deal
+        #     return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
+        #             'emotion' : None, 'intent' : None, 'proposal' : out_proposal_dict}
+        if input_prop_score >= out_prop_score and not incomplete_proposal(input_dict['proposal']):
             ## It seems liek something has been agreed upon. Submit a deal
             return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
                     'emotion' : None, 'intent' : None, 'proposal' : out_proposal_dict}
@@ -376,10 +383,18 @@ class AgentMCTS(AgentTabular):
         output_dict = self.get_dict_from_state(self.index_to_state(best_action))
 
         self.history = input_dict
-        if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
-            ## It seems like something has been agreed upon. Submit a deal
+        input_prop_score = get_proposal_score(self.priorities, input_dict['proposal'], self.score_weightage)
+        out_prop_score = get_proposal_score(self.priorities, output_dict['proposal'], self.score_weightage)
+
+        if input_prop_score >= out_prop_score and not incomplete_proposal(input_dict['proposal']):
+            ## It seems liek something has been agreed upon. Submit a deal
             return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
                     'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
+
+        # if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
+        #     ## It seems like something has been agreed upon. Submit a deal
+        #     return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
+        #             'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
 
         return output_dict
 
@@ -568,10 +583,19 @@ class AgentQLearning(AgentTabular):
         output_dict = self.get_dict_from_state(self.index_to_state(best_action))
 
         self.history = input_dict
-        if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
-            ## It seems like something has been agreed upon. Submit a deal
+
+        input_prop_score = get_proposal_score(self.priorities, input_dict['proposal'], self.score_weightage)
+        out_prop_score = get_proposal_score(self.priorities, output_dict['proposal'], self.score_weightage)
+
+        if input_prop_score >= out_prop_score and not incomplete_proposal(input_dict['proposal']):
+            ## It seems liek something has been agreed upon. Submit a deal
             return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
                     'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
+
+        # if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
+        #     ## It seems like something has been agreed upon. Submit a deal
+        #     return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
+        #             'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
 
         return output_dict
 
@@ -809,10 +833,19 @@ class AgentDeepQLearningMLP(AgentTabular):
         output_dict = self.get_dict_from_state(best_action)
 
         self.history = input_dict
-        if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
-            ## It seems like something has been agreed upon. Submit a deal
+
+        input_prop_score = get_proposal_score(self.priorities, input_dict['proposal'], self.score_weightage)
+        out_prop_score = get_proposal_score(self.priorities, output_dict['proposal'], self.score_weightage)
+
+        if input_prop_score >= out_prop_score and not incomplete_proposal(input_dict['proposal']):
+            ## It seems liek something has been agreed upon. Submit a deal
             return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
                     'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
+
+        # if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
+        #     ## It seems like something has been agreed upon. Submit a deal
+        #     return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
+        #             'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
 
         return output_dict
 
