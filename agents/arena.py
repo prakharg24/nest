@@ -2,7 +2,7 @@ import random
 import numpy as np
 import copy
 from dataloader import get_dataset
-from agents import AgentNoPlanningBayesian, AgentDummy, AgentMCTS, AgentQLearning, AgentDeepQLearningMLP
+from agents import AgentNoPlanningBayesian, AgentDummy, AgentMCTS, AgentQLearning, AgentDeepQLearningMLP, AgentNoPlanningImitation
 from agent_utils import agent_negotiation, get_chunks
 
 random.seed(32)
@@ -16,6 +16,7 @@ length_limit = 20
 fp_scaling_factor = 0.1
 
 num_rounds = 2
+num_rounds_test = 2
 
 all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json')
 
@@ -79,5 +80,35 @@ for round in range(num_rounds):
 
 # agent_list[-1].save_model()
 agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: item[1])}
-print("Final Scores")
+print("Final Training Scores")
+print(agent_scores)
+
+
+for ele in agent_list:
+    ele.set_mode('eval')
+
+for ele in agent_scores:
+    agent_scores[ele] = 0
+
+for round in range(num_rounds_test):
+    ## do random pairings
+    random.shuffle(agent_list)
+    chunk_list = list(get_chunks(agent_list, 2))
+    print("Pairings for Round %d" % round)
+    print([(ele[0].id, ele[1].id) for ele in chunk_list])
+    for agent_tuple in chunk_list:
+        if len(agent_tuple)!=2:
+            continue
+
+        ### choose a random conversation
+        conv_ind = np.random.choice(range(len(all_data)))
+        (conversation, participant_info) = all_data[conv_ind]
+
+        reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20, fp_scaling_factor=0.1)
+        agent_scores[agent_tuple[0].id] += reward_tuple[0]
+        agent_scores[agent_tuple[1].id] += reward_tuple[1]
+
+# agent_list[-1].save_model()
+agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: item[1])}
+print("Final Testing Scores")
 print(agent_scores)
