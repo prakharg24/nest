@@ -13,10 +13,10 @@ priorities = ["Low", "Medium", "High"]
 score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
 length_penalty = 0.5
 length_limit = 20
-fp_scaling_factor = 0.1
+fp_scaling_factor = 0.
 
-num_rounds = 5
-num_rounds_test = 5
+num_rounds = 20
+num_rounds_test = 10
 
 all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json')
 
@@ -28,31 +28,33 @@ agent_id_counter = 0
 #     agent_list.append(AgentDummy(score_weightage, length_penalty, agent_id_counter))
 #     agent_id_counter += 1
 
-for i in range(10):
+num_copies = 2
+
+for i in range(num_copies):
     agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
     agent_list[-1].load_model()
     agent_list[-1].set_mode('eval')
     agent_id_counter += 1
 
-for i in range(10):
+for i in range(num_copies):
     agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
     agent_list[-1].load_model()
     agent_list[-1].set_mode('eval')
     agent_id_counter += 1
 
-for i in range(10):
+for i in range(num_copies):
     agent_list.append(AgentMCTS(score_weightage, length_penalty, agent_id_counter))
     # agent_list[-1].load_model()
     agent_list[-1].set_mode('train')
     agent_id_counter += 1
 
-for i in range(10):
+for i in range(num_copies):
     agent_list.append(AgentQLearning(score_weightage, length_penalty, agent_id_counter))
     # agent_list[-1].load_model()
     agent_list[-1].set_mode('train')
     agent_id_counter += 1
-
-for i in range(10):
+#
+for i in range(num_copies):
     agent_list.append(AgentDeepQLearningMLP(score_weightage, length_penalty, agent_id_counter))
     # agent_list[-1].load_model()
     agent_list[-1].set_mode('train')
@@ -64,8 +66,9 @@ for round in range(num_rounds):
     ## do random pairings
     random.shuffle(agent_list)
     chunk_list = list(get_chunks(agent_list, 2))
-    print("Pairings for Round %d" % round)
-    print([(ele[0].id, ele[1].id) for ele in chunk_list])
+    print("Training Round %d" % round)
+    # print("Pairings for Round %d" % round)
+    # print([(ele[0].id, ele[1].id) for ele in chunk_list])
     for agent_tuple in chunk_list:
         if len(agent_tuple)!=2:
             continue
@@ -94,8 +97,9 @@ for round in range(num_rounds_test):
     ## do random pairings
     random.shuffle(agent_list)
     chunk_list = list(get_chunks(agent_list, 2))
-    print("Pairings for Round %d" % round)
-    print([(ele[0].id, ele[1].id) for ele in chunk_list])
+    print("Testing for Round %d" % round)
+    # print("Pairings for Round %d" % round)
+    # print([(ele[0].id, ele[1].id) for ele in chunk_list])
     for agent_tuple in chunk_list:
         if len(agent_tuple)!=2:
             continue
@@ -115,8 +119,8 @@ print(agent_scores)
 
 for i in range(5):
     local_agent_score_arr = []
-    for j in range(10):
-        ind = 10*i + j
+    for j in range(num_copies):
+        ind = num_copies*i + j
         local_agent_score_arr.append(agent_scores[ind])
     print(local_agent_score_arr)
     print(np.mean(local_agent_score_arr), np.std(local_agent_score_arr))

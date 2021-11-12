@@ -556,8 +556,8 @@ class AgentMCTS(AgentTabular):
         self.marker_visits = []
         self.history = None
 
-        self.exploration_term = 1
-        self.marker_exploration_term = 1
+        self.exploration_term = 1.
+        self.marker_exploration_term = 1.
 
     def step_passive(self, input_dict, output_dict):
         if self.mode != 'train':
@@ -772,14 +772,14 @@ class AgentQLearning(AgentTabular):
         self.marker_visits = []
         self.history = None
 
-        self.epsilon = 0.1
-        self.marker_epsilon = 0.1
+        self.epsilon = 0.2
+        self.marker_epsilon = 0.2
 
-        self.alpha = 0.1
-        self.marker_alpha = 0.1
+        self.alpha = 0.2
+        self.marker_alpha = 0.2
 
-        self.gamma = 0.8
-        self.marker_gamma = 0.8
+        self.gamma = 0.9
+        self.marker_gamma = 0.9
 
     def step_passive(self, input_dict, output_dict):
         if self.mode != 'train':
@@ -833,9 +833,10 @@ class AgentQLearning(AgentTabular):
         current_state = self.get_state_from_dict(input_dict)
         current_state_index = self.state_to_index(current_state)
 
-        utility_arr = self.utility_space[current_state_index, :]
+        utility_arr = self.utility_space[current_state_index, :].toarray()
 
-        best_action = utility_arr.argmax()
+        winners = np.argwhere(utility_arr == np.amax(utility_arr))
+        best_action = np.random.choice(winners[:,1])
 
         if self.mode=="train":
             rand_prob = random.uniform(0, 1)
@@ -999,11 +1000,11 @@ class AgentDeepQLearningMLP(AgentTabular):
         self.marker_visits = []
         self.history = None
 
-        self.epsilon = 0.1
-        self.marker_epsilon = 0.1
+        self.epsilon = 0.2
+        self.marker_epsilon = 0.2
 
-        self.gamma = 0.8
-        self.marker_gamma = 0.8
+        self.gamma = 0.9
+        self.marker_gamma = 0.9
 
     def step_passive(self, input_dict, output_dict):
         if self.mode != 'train':
