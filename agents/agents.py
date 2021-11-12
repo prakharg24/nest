@@ -6,6 +6,7 @@ import json
 import pickle
 import random
 import torch
+import torch.nn.functional as F
 from agent_utils import get_random_emotion, get_random_intent, choose_random_with_prob, normalize_prob, index_to_onehot
 from agent_utils import get_proposal_score, incomplete_proposal, switch_proposal_perspective, convert_proposal_to_arr
 from agent_utils import uct_score
@@ -261,6 +262,269 @@ class AgentNoPlanningBayesian(AgentTabular):
         self.proposal_emotion_joint_count       = indict['proposal_emotion_joint_count']
         self.proposal_intent_joint_count        = indict['proposal_intent_joint_count']
         self.acceptance_count                   = indict['acceptance_count']
+
+    def start_conversation(self):
+        self.history = None
+        self.priorities = None
+        self.name = None
+        self.conversation = None
+
+### Imitation Agent that directly learns the dataset but does no further planning
+class AgentNoPlanningImitation(AgentTabular):
+    def __init__(self, score_weightage, length_penalty, id):
+        super().__init__(score_weightage, length_penalty, id)
+        self.type = 'imitation'
+
+        state_space_onehot = 0
+        state_space_onehot += num_emotion
+        state_space_onehot += num_intent
+        state_space_onehot += 4*3
+        self.state_space_onehot = state_space_onehot
+
+        self.marker_space_onehot = 4*3
+
+        self.emotion_model = Feedforward(self.state_space_onehot, 32, num_emotion)
+        self.emotion_optimizer = torch.optim.SGD(self.emotion_model.parameters(), lr = 0.01)
+
+        self.intent_model = Feedforward(self.state_space_onehot, 32, num_intent)
+        self.intent_optimizer = torch.optim.SGD(self.intent_model.parameters(), lr = 0.01)
+
+        self.proposal_models = []
+        self.proposal_optimizers = []
+        for _ in range(3):
+            self.proposal_models.append(Feedforward(self.state_space_onehot, 32, 4))
+            self.proposal_optimizers.append(torch.optim.SGD(self.proposal_models[-1].parameters(), lr = 0.01))
+
+        self.marker_model = Feedforward(self.marker_space_onehot, 32, 1)
+        self.marker_optimizer = torch.optim.SGD(self.marker_model.parameters(), lr = 0.01)
+
+        self.criterion = torch.nn.BCELoss()
+
+        self.history = None
+
+    def step_passive(self, input_dict, output_dict):
+        if self.mode != 'train':
+            ## No history saving required in the eval mode
+            return
+        if input_dict is None:
+            ## Just the first spoken dialogue. Skip
+            return
+
+        if input_dict['is_marker'] or output_dict['is_marker']:
+            ## Marker sentences.
+            if input_dict['text']=='Submit-Deal' and output_dict['text']=='Accept-Deal':
+                ## The submitted deal will not contain a -1
+                acceptance_arr = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
+                marker_index = []
+                marker_index.extend(index_to_onehot(acceptance_arr[0], 4))
+                marker_index.extend(index_to_onehot(acceptance_arr[1], 4))
+                marker_index.extend(index_to_onehot(acceptance_arr[2], 4))
+
+                marker_utility_output = torch.sigmoid(self.marker_model(torch.Tensor(marker_index)))
+                marker_label = torch.Tensor([0])
+
+                loss = self.criterion(marker_utility_output, marker_label)
+                self.marker_optimizer.zero_grad()
+                loss.backward()
+                self.marker_optimizer.step()
+
+            elif input_dict['text']=='Submit-Deal' and output_dict['text']=='Reject-Deal':
+                ## The submitted deal will not contain a -1
+                acceptance_arr = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
+                marker_index = []
+                marker_index.extend(index_to_onehot(acceptance_arr[0], 4))
+                marker_index.extend(index_to_onehot(acceptance_arr[1], 4))
+                marker_index.extend(index_to_onehot(acceptance_arr[2], 4))
+
+                marker_utility_output = torch.sigmoid(self.marker_model(torch.Tensor(marker_index)))
+                marker_label = torch.Tensor([1])
+
+                loss = self.criterion(marker_utility_output, marker_label)
+                self.marker_optimizer.zero_grad()
+                loss.backward()
+                self.marker_optimizer.step()
+
+            return
+
+        inp_state = self.get_state_from_dict(input_dict)
+        out_emotion = F.softmax(self.emotion_model(torch.Tensor(inp_state)), dim=0)
+        out_intent = torch.sigmoid(self.intent_model(torch.Tensor(inp_state)))
+        out_proposals = []
+        for proposal_model in self.proposal_models:
+            out_proposals.append(F.softmax(proposal_model(torch.Tensor(inp_state)), dim=0))
+
+        out_state = self.get_state_from_dict(output_dict)
+        label_emotion = out_state[:num_emotion]
+        label_intent = out_state[num_emotion:num_emotion + num_intent]
+        label_proposals = [out_state[-3*4:-2*4],
+                           out_state[-2*4:-1*4],
+                           out_state[-1*4:]]
+
+        loss = self.criterion(out_emotion, torch.Tensor(label_emotion))
+        self.emotion_optimizer.zero_grad()
+        loss.backward()
+        self.emotion_optimizer.step()
+
+        loss = self.criterion(out_intent, torch.Tensor(label_intent))
+        self.intent_optimizer.zero_grad()
+        loss.backward()
+        self.intent_optimizer.step()
+
+        for ind in range(3):
+            loss = self.criterion(out_proposals[ind], torch.Tensor(label_proposals[ind]))
+            self.proposal_optimizers[ind].zero_grad()
+            loss.backward()
+            self.proposal_optimizers[ind].step()
+
+    def step_active(self, input_dict):
+        if self.mode == 'train':
+            ## Switch perspective since we are looking for other speaker's utterance
+            input_reversed = switch_proposal_perspective(input_dict)
+            for ind, ele in enumerate(self.conversation):
+                if ele == input_reversed:
+                    curr_dia = ind
+                    break
+            self.step_passive(input_dict, self.conversation[curr_dia+1])
+            return self.conversation[curr_dia+1]
+
+        if input_dict is None:
+            ## The case when the agent needs to speak first
+            raise Exception("Input Dict was Empty. The Agents are not trained to actively start negotiations")
+
+        if input_dict['is_marker']:
+            ## Marker cases
+            if input_dict['text']=='Submit-Deal':
+                acceptance_arr = convert_proposal_to_arr(input_dict['proposal'], self.priorities)
+                marker_index = []
+                marker_index.extend(index_to_onehot(acceptance_arr[0], 4))
+                marker_index.extend(index_to_onehot(acceptance_arr[1], 4))
+                marker_index.extend(index_to_onehot(acceptance_arr[2], 4))
+
+                marker_utility_output = torch.sigmoid(self.marker_model(torch.Tensor(marker_index)))
+
+                if marker_utility_output.detach().cpu().numpy()[0] < 0.5:
+                    is_accepted = True
+                else:
+                    is_accepted = False
+
+                if is_accepted:
+                    return {'speaker_id' : self.name, 'text' : 'Accept-Deal', 'is_marker' : True,
+                            'emotion' : None, 'intent' : None, 'proposal' : None}
+                else:
+                    return {'speaker_id' : self.name, 'text' : 'Reject-Deal', 'is_marker' : True,
+                            'emotion' : None, 'intent' : None, 'proposal' : None}
+
+            elif input_dict['text']=='Reject-Deal':
+                ## Use the last conversation again to regenerate a proposal
+                input_dict = self.history
+
+        inp_state = self.get_state_from_dict(input_dict)
+        out_emotion = F.softmax(self.emotion_model(torch.Tensor(inp_state)), dim=0)
+        out_intent = torch.sigmoid(self.intent_model(torch.Tensor(inp_state)))
+        out_proposals = []
+        for proposal_model in self.proposal_models:
+            out_proposals.append(F.softmax(proposal_model(torch.Tensor(inp_state)), dim=0))
+
+        out_state = []
+        out_state.extend(out_emotion.detach().cpu().numpy())
+        out_intent = out_intent.detach().cpu().numpy() >= 0.5
+        out_intent = out_intent.astype(int)
+        out_state.extend(out_intent)
+        out_state.extend(out_proposals[0].detach().cpu().numpy())
+        out_state.extend(out_proposals[1].detach().cpu().numpy())
+        out_state.extend(out_proposals[2].detach().cpu().numpy())
+
+        output_dict = self.get_dict_from_state(out_state)
+
+        self.history = input_dict
+
+        input_prop_score = get_proposal_score(self.priorities, input_dict['proposal'], self.score_weightage)
+        out_prop_score = get_proposal_score(self.priorities, output_dict['proposal'], self.score_weightage)
+
+        # if input_dict['proposal'] == out_proposal_dict and not incomplete_proposal(input_dict['proposal']):
+        #     ## It seems liek something has been agreed upon. Submit a deal
+        #     return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
+        #             'emotion' : None, 'intent' : None, 'proposal' : out_proposal_dict}
+
+        if input_prop_score >= out_prop_score and not incomplete_proposal(input_dict['proposal']):
+        # if input_dict['proposal'] == output_dict['proposal'] and not incomplete_proposal(input_dict['proposal']):
+            ## It seems liek something has been agreed upon. Submit a deal
+            return {'speaker_id' : self.name, 'text' : 'Submit-Deal', 'is_marker' : True,
+                    'emotion' : None, 'intent' : None, 'proposal' : output_dict['proposal']}
+
+        return {'speaker_id' : self.name,
+                'text' : 'Imitation Agent does not generate text.',
+                'is_marker' : False,
+                'emotion' : output_dict['emotion'],
+                'intent' : output_dict['intent'],
+                'proposal' : output_dict['proposal']}
+
+    def get_state_from_dict(self, inpdict):
+        state = []
+        state.extend(index_to_onehot(inpdict['emotion'], num_emotion))
+        state.extend(inpdict['intent'])
+
+        proposal_arr = convert_proposal_to_arr(inpdict['proposal'], self.priorities)
+        state.extend(index_to_onehot(proposal_arr[0], 4))
+        state.extend(index_to_onehot(proposal_arr[1], 4))
+        state.extend(index_to_onehot(proposal_arr[2], 4))
+
+        return state
+
+    def get_dict_from_state(self, state):
+        outdict = {}
+        outdict['speaker_id'] = self.name
+        outdict['text'] = 'Imitation Agent does not generate text.'
+        outdict['is_marker'] = False
+        outdict['emotion'] = np.argmax(state[:num_emotion])
+        outdict['intent'] = state[num_emotion:num_emotion + num_intent]
+        proposal = {}
+        proposal[self.priorities["High"]] = np.argmax(state[-3*4:-2*4])
+        proposal[self.priorities["Medium"]] = np.argmax(state[-2*4:-1*4])
+        proposal[self.priorities["Low"]] = np.argmax(state[-1*4:])
+        outdict['proposal'] = proposal
+
+        return outdict
+
+    def save_model(self, outfolder='models/imitation/'):
+        outdict = {'state_space_onehot'             : self.state_space_onehot,
+                   'marker_space_onehot'            : self.marker_space_onehot}
+
+        with open(outfolder + "hyperparameters.pkl", 'wb') as fp:
+            pickle.dump(outdict, fp)
+
+        state_dicts = []
+        state_dicts.append(self.emotion_model.state_dict())
+
+        state_dicts.append(self.intent_model.state_dict())
+
+        for ind in range(3):
+            state_dicts.append(self.proposal_models[ind].state_dict())
+
+        state_dicts.append(self.marker_model.state_dict())
+
+        with open(outfolder + "state_dicts.pkl", 'wb') as fp:
+            pickle.dump(state_dicts, fp)
+
+    def load_model(self, infolder='models/imitation/'):
+        with open(infolder + "hyperparameters.pkl", 'rb') as fp:
+            indict = pickle.load(fp)
+
+        self.state_space_onehot             = indict['state_space_onehot']
+        self.marker_space_onehot            = indict['marker_space_onehot']
+
+        with open(infolder + "state_dicts.pkl", 'rb') as fp:
+            indict = pickle.load(fp)
+
+        self.emotion_model.load_state_dict(indict[0])
+
+
+        self.intent_model.load_state_dict(indict[1])
+
+        for ind in range(3):
+            self.proposal_models[ind].load_state_dict(indict[2+ind])
+
+        self.marker_model.load_state_dict(indict[-1])
 
     def start_conversation(self):
         self.history = None

@@ -101,13 +101,14 @@ def train(agent1, agent2):
         agent2.save_model()
 
 if __name__ == "__main__":
-    training_setup = 2
+    training_setup = 1
     if training_setup==1:
         agent1 = AgentDummy(score_weightage, length_penalty, 0)
         agent1.set_mode('eval')
         agent2 = AgentNoPlanningBayesian(score_weightage, length_penalty, 0)
-        agent2.load_model()
-        agent2.set_mode('eval')
+        # agent2.load_model()
+        # agent2.set_mode('eval')
+        agent2.set_mode('train')
         train(agent1, agent2)
     if training_setup==2:
         agent1 = AgentDummy(score_weightage, length_penalty, 0)
