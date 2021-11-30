@@ -7,6 +7,7 @@ from nest_helper import get_agents, get_random_conversation, is_terminated, get_
 import random
 import numpy as np
 import copy
+from tabulate import tabulate
 
 random.seed(32)
 np.random.seed(32)
@@ -31,7 +32,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_limit,
     for dialogue in conversation:
         if dialogue['speaker_id'] not in speaker_tuple:
             agent_id = dialogue['speaker_id']
-            agent_tuple[act_ag].set_priority(participant_info[agent_id])
+            agent_tuple[act_ag].set_participant_info(participant_info[agent_id])
             agent_tuple[act_ag].set_name(agent_id)
             act_ag = (act_ag+1)%2
             speaker_tuple.append(agent_id)
@@ -46,18 +47,18 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_limit,
     conv_prefix, conv_suffix = extract_prefix(conversation)
 
     ## Let both the agents go through the conversation prefix one at a time
-    agent_tuple[act_ag].step_passive(None, conv_prefix[0])
+    agent_tuple[act_ag].step(None, outdialogue=conv_prefix[0], switch='passive')
     record_conversation.append(conv_prefix[0])
     act_ag = (act_ag+1)%2
 
     for dia, dia_next in zip(conv_prefix, conv_prefix[1:]):
-        agent_tuple[act_ag].step_passive(dia, dia_next)
+        agent_tuple[act_ag].step(dia, outdialogue=dia_next, switch='passive')
         record_conversation.append(dia_next)
         act_ag = (act_ag+1)%2
 
     prev_dialog = conv_prefix[-1]
     while True:
-        out_dialog = agent_tuple[act_ag].step_active(prev_dialog)
+        out_dialog = agent_tuple[act_ag].step(prev_dialog, switch='active')
         record_conversation.append(out_dialog)
         if(is_terminated(out_dialog) or len(record_conversation) > length_limit):
             break
@@ -72,7 +73,10 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_limit,
     return reward_dict
 
 def display_agent_scores(agent_scores, num_highest=5, num_lowest=5, collect_similar_agents=True, header_text=""):
-    print("Display")
+    ## Best Agents
+    headers = list(agent_scores[0].keys())
+    agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: sum(item[1].values()))}
+    print("Best %d Agents" % num_highest)
 
 
 length_limit = 20
@@ -96,7 +100,7 @@ for round in range(num_rounds_train):
             continue
 
         ### choose a random conversation
-        (conversation, participant_info) = get_random_conversation()
+        conversation, participant_info = get_random_conversation()
 
         reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_limit=length_limit)
 

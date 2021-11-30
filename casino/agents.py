@@ -22,12 +22,8 @@ class AgentTabular():
         self.id = id
         self.type = 'base'
 
-    def set_priority(self, priorities):
-        ## Important Assumption. We sort the priorities as high, medium and low which is relevant for certain parts of the code
-        ## Copy it accordingly for any inherited class
-        sort_by = ["High", "Medium", "Low"]
-        priorities = {k: priorities[k] for k in sort_by}
-        self.priorities = priorities
+    def set_participant_info(self, participant_info):
+        self.participant_info = participant_info
 
     def set_name(self, agent_name):
         self.name = agent_name
@@ -42,6 +38,12 @@ class AgentTabular():
     def load_model(self, infile='some_fixed_file.pt'):
         ## load the model parameters back
         return
+
+    def step(self, indialogue, outdialogue=None, switch='passive'):
+        if switch=='passive':
+            return self.step_passive(indialogue, outdialogue)
+        elif switch=='active':
+            return self.step_active(indialogue)
 
     def step_passive(self, input_dict, output_dict):
         ### Skeleton Function. Inherit this and change to memorise the agent's history
@@ -63,11 +65,29 @@ class AgentTabular():
         self.mode = mode
 
 ### Required for training of agents which use actual dataset based calculations
-class AgentDataset(AgentTabular):
+class AgentCasino(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.conversation_count = 0
         self.type = 'dataset'
+
+    def set_priority(self, priority):
+        ## Important Assumption. We sort the priorities as high, medium and low which is relevant for certain parts of the code
+        ## Copy it accordingly for any inherited class
+        sort_by = ["High", "Medium", "Low"]
+        priorities = {k: priorities[k] for k in sort_by}
+        self.priorities = priorities
+
+    def set_participant_info(self, participant_info):
+        self.set_priority(participant_info['value2issue'])
+
+    def step(self, indialogue, outdialogue=None, switch='passive'):
+        input_dict = switch_proposal_perspective(indialogue)
+        output_dict = outdialogue
+        if switch=='passive':
+            return self.step_passive(input_dict, output_dict)
+        elif switch=='active':
+            return self.step_active(input_dict)
 
     def step_passive(self, input_dict, output_dict):
         return_ind = None
@@ -97,7 +117,7 @@ class AgentDataset(AgentTabular):
         self.conversation_count = 0
 
 ### Bayesian Agent that uses existing data to create probability arrays
-class AgentNoPlanningBayesian(AgentTabular):
+class AgentNoPlanningBayesian(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.type = 'bayesian'
@@ -270,7 +290,7 @@ class AgentNoPlanningBayesian(AgentTabular):
         self.conversation = None
 
 ### Imitation Agent that directly learns the dataset but does no further planning
-class AgentNoPlanningImitation(AgentTabular):
+class AgentNoPlanningImitation(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.type = 'imitation'
@@ -533,7 +553,7 @@ class AgentNoPlanningImitation(AgentTabular):
         self.conversation = None
 
 ### MCTS Agent
-class AgentMCTS(AgentTabular):
+class AgentMCTS(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.type = 'mcts'
@@ -753,7 +773,7 @@ class AgentMCTS(AgentTabular):
         return
 
 ### Q Learning Agent
-class AgentQLearning(AgentTabular):
+class AgentQLearning(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.type = 'qlearning'
@@ -963,7 +983,7 @@ class AgentQLearning(AgentTabular):
         return
 
 ### Deep Q Learning Agent with MLP
-class AgentDeepQLearningMLP(AgentTabular):
+class AgentDeepQLearningMLP(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.type = 'deepqlearning'
