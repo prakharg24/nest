@@ -2,7 +2,7 @@ import sys
 case_study = 'casino'
 sys.path.append(case_study)
 
-from nest_helper import get_agents, get_dataset, is_terminated
+from nest_helper import get_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
 
 import random
 import numpy as np
@@ -18,7 +18,7 @@ def get_chunks(lst, n):
 def extract_prefix(conversation):
     return conversation[:4], conversation[4:]
 
-def agent_negotiation(agent_tuple, conversation, participant_info, length_penalty, length_limit, act_ag=0, reward_sf = 1., fairness_sf=0.1):
+def agent_negotiation(agent_tuple, conversation, participant_info, length_limit, act_ag=0):
 
     record_conversation = []
 
@@ -64,141 +64,45 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_penalt
         act_ag = (act_ag+1)%2
         prev_dialog = out_dialog
 
-    reward_tuple = [0, 0]
-    conv_length_penalty = length_penalty * len(record_conversation)
-    prev_dialog_reverted = switch_proposal_perspective(prev_dialog)
+    reward_dict = get_reward_dict(agent_tuple, record_conversation)
 
-    term_reward = get_termination_reward(agent_tuple, record_conversation)
-    fair_penalty = get_fairness_penalty(agent_tuple, record_conversation)
-    ## Add more constraints as required
+    agent_tuple[0].step_reward(sum(reward_dict[0].values()))
+    agent_tuple[1].step_reward(sum(reward_dict[1].values()))
 
-    reward_tuple[0] += term_reward[0]*reward_sf - conv_length_penalty - fair_penalty[1]*fairness_sf
-    reward_tuple[1] += term_reward[1]*reward_sf - conv_length_penalty - fair_penalty[1]*fairness_sf
+    return reward_dict
 
-    agent_tuple[0].step_reward(reward_tuple[0])
-    agent_tuple[1].step_reward(reward_tuple[1])
+def display_agent_scores(agent_scores, num_highest=5, num_lowest=5, collect_similar_agents=True, header_text=""):
+    print("Display")
 
-    return record_conversation, reward_tuple
 
-### Initialize Meta Data Regarding the Negotiations
-elements_to_divide = ["Firewood", "Water", "Food"]
-priorities = ["Low", "Medium", "High"]
-score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
-length_penalty = 0.5
 length_limit = 20
-fp_scaling_factor = 0.
 
-num_rounds = 20
+num_rounds_train = 20
 num_rounds_test = 10
 
-all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json')
+agent_list = get_agents()
+agent_scores = {ele.id: get_zero_reward_dict() for ele in agent_list}
 
-### Initialize and Collect all agents to take part in the negotiations
-agent_list = []
-agent_id_counter = 0
-
-# for i in range(5):
-#     agent_list.append(AgentDummy(score_weightage, length_penalty, agent_id_counter))
-#     agent_id_counter += 1
-
-num_copies = 2
-
-for i in range(num_copies):
-    agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
-    agent_list[-1].load_model()
-    agent_list[-1].set_mode('eval')
-    agent_id_counter += 1
-
-for i in range(num_copies):
-    agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
-    agent_list[-1].load_model()
-    agent_list[-1].set_mode('eval')
-    agent_id_counter += 1
-
-for i in range(num_copies):
-    agent_list.append(AgentMCTS(score_weightage, length_penalty, agent_id_counter))
-    # agent_list[-1].load_model()
-    agent_list[-1].set_mode('train')
-    agent_id_counter += 1
-
-for i in range(num_copies):
-    agent_list.append(AgentQLearning(score_weightage, length_penalty, agent_id_counter))
-    # agent_list[-1].load_model()
-    agent_list[-1].set_mode('train')
-    agent_id_counter += 1
-#
-for i in range(num_copies):
-    agent_list.append(AgentDeepQLearningMLP(score_weightage, length_penalty, agent_id_counter))
-    # agent_list[-1].load_model()
-    agent_list[-1].set_mode('train')
-    agent_id_counter += 1
-
-agent_scores = {ele.id: 0 for ele in agent_list}
-
-for round in range(num_rounds):
-    ## do random pairings
+for round in range(num_rounds_train):
+    ## Random pairings
     random.shuffle(agent_list)
     chunk_list = list(get_chunks(agent_list, 2))
     print("Training Round %d" % round)
     # print("Pairings for Round %d" % round)
     # print([(ele[0].id, ele[1].id) for ele in chunk_list])
+
     for agent_tuple in chunk_list:
         if len(agent_tuple)!=2:
             continue
 
         ### choose a random conversation
-        conv_ind = np.random.choice(range(len(all_data)))
-        (conversation, participant_info) = all_data[conv_ind]
+        (conversation, participant_info) = get_random_conversation()
 
-        reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_penalty, score_weightage, length_limit=20, act_ag=0, fp_scaling_factor=0.1)
-        agent_scores[agent_tuple[0].id] += reward_tuple[0]
-        agent_scores[agent_tuple[1].id] += reward_tuple[1]
+        reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_limit=length_limit)
 
-# agent_list[-1].save_model()
-agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: item[1])}
-print("Final Training Scores")
-print(agent_scores)
+        for k in reward_tuple[0]:
+            agent_scores[agent_tuple[0].id][k] += reward_tuple[0][k]
+        for k in reward_tuple[1]:
+            agent_scores[agent_tuple[1].id][k] += reward_tuple[1][k]
 
-
-for ele in agent_list:
-    ele.set_mode('eval')
-
-for ele in agent_scores:
-    agent_scores[ele] = 0
-
-for round in range(num_rounds_test):
-    ## do random pairings
-    random.shuffle(agent_list)
-    chunk_list = list(get_chunks(agent_list, 2))
-    print("Testing for Round %d" % round)
-    # print("Pairings for Round %d" % round)
-    # print([(ele[0].id, ele[1].id) for ele in chunk_list])
-    for agent_tuple in chunk_list:
-        if len(agent_tuple)!=2:
-            continue
-
-        ### choose a random conversation
-        conv_ind = np.random.choice(range(len(all_data)))
-        (conversation, participant_info) = all_data[conv_ind]
-
-        reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_penalty, score_weightage, act_ag=0, length_limit=20, fp_scaling_factor=0.1)
-        agent_scores[agent_tuple[0].id] += reward_tuple[0]
-        agent_scores[agent_tuple[1].id] += reward_tuple[1]
-
-# agent_list[-1].save_model()
-agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: item[1])}
-print("Final Testing Scores")
-print(agent_scores)
-
-for i in range(5):
-    local_agent_score_arr = []
-    for j in range(num_copies):
-        ind = num_copies*i + j
-        local_agent_score_arr.append(agent_scores[ind])
-    print(local_agent_score_arr)
-    print(np.mean(local_agent_score_arr), np.std(local_agent_score_arr))
-
-
-## Train/Test the Model with the Negotiation Setup
-
-## Save Trained Models if Any
+display_agent_scores(agent_scores, header_text="Final Scores")
