@@ -1,9 +1,5 @@
 import sys
-case_study = 'casino'
-sys.path.append(case_study)
-
-from nest_helper import get_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
-
+import argparse
 import random
 import numpy as np
 import copy
@@ -77,6 +73,16 @@ def display_agent_scores(agent_scores, num_highest=5, num_lowest=5, collect_simi
     headers = list(agent_scores[0].keys())
     agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: sum(item[1].values()))}
     print("Best %d Agents" % num_highest)
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-db", "--database", default="casino", help="Name of Dataset Used")
+
+args = parser.parse_args()
+
+sys.path.append(args.database)
+
+from nest_helper import get_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
 
 
 length_limit = 20
