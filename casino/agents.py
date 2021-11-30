@@ -20,7 +20,7 @@ class AgentTabular():
         self.score_weightage = score_weightage
         self.length_penalty = length_penalty
         self.id = id
-        self.type = 'base'
+        self.type = 'Base'
 
     def set_participant_info(self, participant_info):
         self.participant_info = participant_info
@@ -69,9 +69,9 @@ class AgentCasino(AgentTabular):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
         self.conversation_count = 0
-        self.type = 'dataset'
+        self.type = 'Dataset'
 
-    def set_priority(self, priority):
+    def set_priority(self, priorities):
         ## Important Assumption. We sort the priorities as high, medium and low which is relevant for certain parts of the code
         ## Copy it accordingly for any inherited class
         sort_by = ["High", "Medium", "Low"]
@@ -120,7 +120,7 @@ class AgentCasino(AgentTabular):
 class AgentNoPlanningBayesian(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-        self.type = 'bayesian'
+        self.type = 'Bayesian'
         self.emotion_trans_count = np.zeros((num_emotion, num_emotion)) ## transition probability between emotions
         self.intent_trans_count = np.zeros((num_intent, 2, 2)) ## transition probability for each intent separately
         self.proposal_prevproposal_joint_count = {"High": np.zeros((4, 4)),
@@ -261,7 +261,7 @@ class AgentNoPlanningBayesian(AgentCasino):
             for counter, e1 in enumerate(output_dict['intent']):
                 self.proposal_intent_joint_count[priority][output_arr[ind], counter, e1] += 1
 
-    def save_model(self, outfile='models/bayesian_v1.pkl'):
+    def save_model(self, outfile='casino/models/bayesian_v1.pkl'):
         outdict = {'emotion_trans_count'                : self.emotion_trans_count,
                    'intent_trans_count'                 : self.intent_trans_count,
                    'proposal_prevproposal_joint_count'  : self.proposal_prevproposal_joint_count,
@@ -272,7 +272,7 @@ class AgentNoPlanningBayesian(AgentCasino):
         with open(outfile, 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='models/bayesian_v1.pkl'):
+    def load_model(self, infile='casino/models/bayesian_v1.pkl'):
         with open(infile, 'rb') as fp:
             indict = pickle.load(fp)
 
@@ -293,7 +293,7 @@ class AgentNoPlanningBayesian(AgentCasino):
 class AgentNoPlanningImitation(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-        self.type = 'imitation'
+        self.type = 'Imitation'
 
         state_space_onehot = 0
         state_space_onehot += num_emotion
@@ -506,7 +506,7 @@ class AgentNoPlanningImitation(AgentCasino):
 
         return outdict
 
-    def save_model(self, outfolder='models/imitation/'):
+    def save_model(self, outfolder='casino/models/imitation/'):
         outdict = {'state_space_onehot'             : self.state_space_onehot,
                    'marker_space_onehot'            : self.marker_space_onehot}
 
@@ -526,7 +526,7 @@ class AgentNoPlanningImitation(AgentCasino):
         with open(outfolder + "state_dicts.pkl", 'wb') as fp:
             pickle.dump(state_dicts, fp)
 
-    def load_model(self, infolder='models/imitation/'):
+    def load_model(self, infolder='casino/models/imitation/'):
         with open(infolder + "hyperparameters.pkl", 'rb') as fp:
             indict = pickle.load(fp)
 
@@ -556,7 +556,7 @@ class AgentNoPlanningImitation(AgentCasino):
 class AgentMCTS(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-        self.type = 'mcts'
+        self.type = 'MCTS'
         state_space = []
         state_space.append(num_emotion) ## For emotions
         state_space.extend([2 for _ in range(num_intent)]) ## For intent
@@ -735,7 +735,7 @@ class AgentMCTS(AgentCasino):
 
         return state
 
-    def save_model(self, outfile='models/mcts_v1.pkl'):
+    def save_model(self, outfile='casino/models/mcts_v1.pkl'):
         outdict = {'state_space_dim'                : self.state_space_dim,
                    'state_visit_counts'             : self.state_visit_counts,
                    'state_action_visit_counts'      : self.state_action_visit_counts,
@@ -749,7 +749,7 @@ class AgentMCTS(AgentCasino):
         with open(outfile, 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='models/mcts_v1.pkl'):
+    def load_model(self, infile='casino/models/mcts_v1.pkl'):
         with open(infile, 'rb') as fp:
             indict = pickle.load(fp)
 
@@ -776,7 +776,7 @@ class AgentMCTS(AgentCasino):
 class AgentQLearning(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-        self.type = 'qlearning'
+        self.type = 'Q Learning'
         state_space = []
         state_space.append(num_emotion) ## For emotions
         state_space.extend([2 for _ in range(num_intent)]) ## For intent
@@ -945,7 +945,7 @@ class AgentQLearning(AgentCasino):
 
         return state
 
-    def save_model(self, outfile='models/qlearning_v1.pkl'):
+    def save_model(self, outfile='casino/models/qlearning_v1.pkl'):
         outdict = {'state_space_dim'                : self.state_space_dim,
                    'utility_space'                  : self.utility_space,
                    'marker_utility_space'           : self.marker_utility_space,
@@ -959,7 +959,7 @@ class AgentQLearning(AgentCasino):
         with open(outfile, 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='models/qlearning_v1.pkl'):
+    def load_model(self, infile='casino/models/qlearning_v1.pkl'):
         with open(infile, 'rb') as fp:
             indict = pickle.load(fp)
 
@@ -986,7 +986,7 @@ class AgentQLearning(AgentCasino):
 class AgentDeepQLearningMLP(AgentCasino):
     def __init__(self, score_weightage, length_penalty, id):
         super().__init__(score_weightage, length_penalty, id)
-        self.type = 'deepqlearning'
+        self.type = 'Deep Q Learning'
 
         state_space_onehot = 0
         state_space_onehot += num_emotion
@@ -1204,7 +1204,7 @@ class AgentDeepQLearningMLP(AgentCasino):
 
         return outdict
 
-    def save_model(self, outfolder='models/deepqlearning/'):
+    def save_model(self, outfolder='casino/models/deepqlearning/'):
         print("Hello")
         outdict = {'state_space_onehot'             : self.state_space_onehot,
                    'marker_space_onehot'            : self.marker_space_onehot,
@@ -1230,7 +1230,7 @@ class AgentDeepQLearningMLP(AgentCasino):
         with open(outfolder + "state_dicts.pkl", 'wb') as fp:
             pickle.dump(state_dicts, fp)
 
-    def load_model(self, infolder='models/deepqlearning/'):
+    def load_model(self, infolder='casino/models/deepqlearning/'):
         with open(infolder + "hyperparameters.pkl", 'rb') as fp:
             indict = pickle.load(fp)
 

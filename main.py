@@ -1,12 +1,10 @@
 import sys
 import argparse
 import random
-import numpy as np
 import copy
 from tabulate import tabulate
 
 random.seed(32)
-np.random.seed(32)
 
 def get_chunks(lst, n):
     for i in range(0, len(lst), n):
@@ -68,51 +66,73 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_limit,
 
     return reward_dict
 
-def display_agent_scores(agent_scores, num_highest=5, num_lowest=5, collect_similar_agents=True, header_text=""):
+def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, collect_similar_agents=True, header_text=""):
     ## Best Agents
     headers = list(agent_scores[0].keys())
-    agent_scores = {k: v for k, v in sorted(agent_scores.items(), key=lambda item: sum(item[1].values()))}
+    agent_order = [k for k, v in sorted(agent_scores.items(), key=lambda item: sum(item[1].values()))]
     print("Best %d Agents" % num_highest)
+    table = []
+    for agent in agent_order[::-1]:
+        num_highest -= 1
+        row_arr = [agent_list[agent].type]
+        row_arr.extend(list(agent_scores[agent].values()))
+        table.append(row_arr)
+        if num_highest == 0:
+            break
+    print(tabulate(table))
+
+def run_negotiation(agent_list, num_rounds, length_limit):
+
+    agent_scores = {ele.id: get_zero_reward_dict() for ele in agent_list}
+    for round in range(num_rounds):
+        ## Random pairings
+        random.shuffle(agent_list)
+        chunk_list = list(get_chunks(agent_list, 2))
+        print("Round %d" % round)
+        # print("Pairings for Round %d" % round)
+        # print([(ele[0].id, ele[1].id) for ele in chunk_list])
+
+        for agent_tuple in chunk_list:
+            if len(agent_tuple)!=2:
+                continue
+
+            ### choose a random conversation
+            conversation, participant_info = get_random_conversation()
+
+            reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_limit=length_limit)
+
+            for k in reward_tuple[0]:
+                agent_scores[agent_tuple[0].id][k] += reward_tuple[0][k]
+            for k in reward_tuple[1]:
+                agent_scores[agent_tuple[1].id][k] += reward_tuple[1][k]
+
+    return agent_scores
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-db", "--database", default="casino", help="Name of Dataset Used")
+parser.add_argument("--case", default="casino", help="Name of Dataset Used")
+parser.add_argument("--leng_limit", type=int, default=20, help="Conversation Length Limit")
+parser.add_argument("--train_rounds", type=int, default=20, help="Number of Rounds During Training")
+parser.add_argument("--test_rounds", type=int, default=20, help="Number of Rounds During Testing")
+
 
 args = parser.parse_args()
 
-sys.path.append(args.database)
-
+sys.path.append(args.case)
 from nest_helper import get_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
 
-
-length_limit = 20
-
-num_rounds_train = 20
-num_rounds_test = 10
-
 agent_list = get_agents()
-agent_scores = {ele.id: get_zero_reward_dict() for ele in agent_list}
 
-for round in range(num_rounds_train):
-    ## Random pairings
-    random.shuffle(agent_list)
-    chunk_list = list(get_chunks(agent_list, 2))
-    print("Training Round %d" % round)
-    # print("Pairings for Round %d" % round)
-    # print([(ele[0].id, ele[1].id) for ele in chunk_list])
+print("Training")
+train_scores = run_negotiation(agent_list, args.train_rounds, args.leng_limit)
 
-    for agent_tuple in chunk_list:
-        if len(agent_tuple)!=2:
-            continue
+display_agent_scores(agent_list, train_scores, header_text="Training Scores")
 
-        ### choose a random conversation
-        conversation, participant_info = get_random_conversation()
+### Change all agents to eval
+for ele in agent_list:
+    ele.set_mode('eval')
 
-        reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_limit=length_limit)
+print("Testing")
+test_scores = run_negotiation(agent_list, args.test_rounds, args.leng_limit)
 
-        for k in reward_tuple[0]:
-            agent_scores[agent_tuple[0].id][k] += reward_tuple[0][k]
-        for k in reward_tuple[1]:
-            agent_scores[agent_tuple[1].id][k] += reward_tuple[1][k]
-
-display_agent_scores(agent_scores, header_text="Final Scores")
+display_agent_scores(agent_list, test_scores, header_text="Testing Scores")

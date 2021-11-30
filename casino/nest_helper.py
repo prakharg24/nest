@@ -1,9 +1,19 @@
-all_data = get_dataset('../casino_with_emotions_and_intents_and_proposals.json')
+import random
+
+from dataloader import get_dataset
+from agents import AgentNoPlanningBayesian, AgentCasino, AgentMCTS, AgentQLearning, AgentDeepQLearningMLP, AgentNoPlanningImitation
+
+all_data = get_dataset('casino/casino_with_emotions_and_intents_and_proposals.json')
 random.shuffle(all_data)
 conv_ind = 0
 length_penalty = 0.5
+score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
 
 def get_agents():
+
+    num_copies = 2
+    agent_list = []
+    agent_id_counter = 0
     for i in range(num_copies):
         agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
         agent_list[-1].load_model()
@@ -34,7 +44,10 @@ def get_agents():
         agent_list[-1].set_mode('train')
         agent_id_counter += 1
 
+    return agent_list
+
 def get_random_conversation():
+    global conv_ind
     conversation, participant_info = all_data[conv_ind]
     conv_ind = (conv_ind + 1)%len(all_data)
     return conversation, participant_info
