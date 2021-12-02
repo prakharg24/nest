@@ -2,10 +2,18 @@ import sys
 import argparse
 import random
 import copy
+import numpy as np
 from tqdm import tqdm
 from tabulate import tabulate
+import warnings
 
+warnings.filterwarnings("ignore")
 random.seed(32)
+# np.set_printoptions(precision=2)
+
+# class prettyfloat(float):
+#     def __repr__(self):
+#         return "%0.2f" % self
 
 def get_chunks(lst, n):
     for i in range(0, len(lst), n):
@@ -69,6 +77,37 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_limit,
 
     return reward_dict
 
+def display_topk_agents(agent_order, k, agent_list, agent_scores, header=""):
+    table = []
+    for agent in agent_order:
+        k -= 1
+        row_arr = [agent_list[agent].type]
+
+        scores = list(agent_scores[agent].values())
+        scores.append(sum(scores))
+        # scores = list(map(prettyfloat, scores))
+        row_arr.extend(scores)
+
+        table.append(row_arr)
+        if k == 0:
+            break
+
+    print(tabulate(np.array(table), headers=header, tablefmt="pretty"))
+
+def display_agent_types(agent_order, agent_collection, header=""):
+    table = []
+    for agent in agent_order:
+        row_arr = [agent]
+
+        scores = list(agent_collection[agent].values())
+        scores.append(sum(scores))
+        # scores = list(map(prettyfloat, scores))
+        row_arr.extend(scores)
+
+        table.append(row_arr)
+
+    print(tabulate(np.array(table), headers=header, tablefmt="pretty"))
+
 def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, collect_similar_agents=True, header_text=""):
     ## Best Agents
     headers = list(agent_scores[0].keys())
@@ -77,34 +116,30 @@ def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, 
     ind_agent_header.extend(list(list(agent_scores.values())[0].keys()))
     ind_agent_header.append("Final Score")
 
-    print("\n\n" + header_text + "\n\n")
-
-    print("Worst %d Agents" % num_lowest)
-    print("---------------")
-    table = []
-    for agent in agent_order:
-        num_lowest -= 1
-        row_arr = [agent_list[agent].type]
-        row_arr.extend(list(agent_scores[agent].values()))
-        row_arr.append(sum(row_arr[1:]))
-        table.append(row_arr)
-        if num_lowest == 0:
-            break
-    print(tabulate(table, headers=ind_agent_header, tablefmt="pretty"))
+    print("\n\n" + header_text)
 
     print("\n\n")
-    print("Best %d Agents" % num_highest)
-    print("---------------")
-    table = []
-    for agent in agent_order[::-1]:
-        num_highest -= 1
-        row_arr = [agent_list[agent].type]
-        row_arr.extend(list(agent_scores[agent].values()))
-        row_arr.append(sum(row_arr[1:]))
-        table.append(row_arr)
-        if num_highest == 0:
-            break
-    print(tabulate(table, headers=ind_agent_header, tablefmt="pretty"))
+    print("WORST %d AGENTS" % num_lowest)
+    display_topk_agents(agent_order, num_lowest, agent_list, agent_scores, header=ind_agent_header)
+
+    print("\n\n")
+    print("BEST %d AGENTS" % num_highest)
+    display_topk_agents(agent_order[::-1], num_highest, agent_list, agent_scores, header=ind_agent_header)
+
+    if collect_similar_agents:
+        agent_collection = {}
+        for agent in agent_scores:
+            agent_type = agent_list[agent].type
+            if agent_type in agent_collection:
+                for k in agent_scores[agent]:
+                    agent_collection[agent_type][k] += agent_scores[agent][k]
+            else:
+                agent_collection[agent_type] = agent_scores[agent]
+
+        print("\n\n")
+        print("COMBINED SCORE FOR EVERY AGENT TYPE")
+        agent_type_order = [k for k, v in sorted(agent_collection.items(), key=lambda item: sum(item[1].values()))]
+        display_agent_types(agent_type_order[::-1], agent_collection, header=ind_agent_header)
 
     print("\n\n")
 
@@ -142,6 +177,9 @@ parser.add_argument("--case", default="casino", help="Name of Dataset Used")
 parser.add_argument("--leng_limit", type=int, default=20, help="Conversation Length Limit")
 parser.add_argument("--train_rounds", type=int, default=20, help="Number of Rounds During Training")
 parser.add_argument("--test_rounds", type=int, default=20, help="Number of Rounds During Testing")
+parser.add_argument("--vb_highest", type=int, default=5, help="Number of Best Agents Shown in Scoreboard")
+parser.add_argument("--vb_lowest", type=int, default=5, help="Number of Worst Agents Shown in Scoreboard")
+parser.add_argument("--vb_collect", action='store_true', help="Collect Scores of Each Agent Type")
 
 
 args = parser.parse_args()
@@ -154,7 +192,8 @@ agent_list = get_agents()
 print("Training Rounds")
 train_scores = run_negotiation(agent_list, args.train_rounds, args.leng_limit)
 
-display_agent_scores(agent_list, train_scores, header_text="Training Scores")
+display_agent_scores(agent_list, train_scores, num_highest=args.vb_highest, num_lowest=args.vb_lowest,
+                                               collect_similar_agents=args.vb_collect, header_text="Training Scores")
 
 ### Change all agents to eval
 for ele in agent_list:
@@ -163,4 +202,5 @@ for ele in agent_list:
 print("Testing Rounds")
 test_scores = run_negotiation(agent_list, args.test_rounds, args.leng_limit)
 
-display_agent_scores(agent_list, test_scores, header_text="Testing Scores")
+display_agent_scores(agent_list, test_scores, num_highest=args.vb_highest, num_lowest=args.vb_lowest,
+                                               collect_similar_agents=args.vb_collect, header_text="Testing Scores")
