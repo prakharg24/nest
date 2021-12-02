@@ -2,6 +2,7 @@ import sys
 import argparse
 import random
 import copy
+from tqdm import tqdm
 from tabulate import tabulate
 
 random.seed(32)
@@ -53,6 +54,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_limit,
     prev_dialog = conv_prefix[-1]
     while True:
         out_dialog = agent_tuple[act_ag].step(prev_dialog, switch='active')
+        # print(out_dialog)
         record_conversation.append(out_dialog)
         if(is_terminated(out_dialog) or len(record_conversation) > length_limit):
             break
@@ -60,6 +62,7 @@ def agent_negotiation(agent_tuple, conversation, participant_info, length_limit,
         prev_dialog = out_dialog
 
     reward_dict = get_reward_dict(agent_tuple, record_conversation)
+    # print(reward_dict)
 
     agent_tuple[0].step_reward(sum(reward_dict[0].values()))
     agent_tuple[1].step_reward(sum(reward_dict[1].values()))
@@ -70,25 +73,49 @@ def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, 
     ## Best Agents
     headers = list(agent_scores[0].keys())
     agent_order = [k for k, v in sorted(agent_scores.items(), key=lambda item: sum(item[1].values()))]
+    ind_agent_header = ["Agent Type"]
+    ind_agent_header.extend(list(list(agent_scores.values())[0].keys()))
+    ind_agent_header.append("Final Score")
+
+    print("\n\n" + header_text + "\n\n")
+
+    print("Worst %d Agents" % num_lowest)
+    print("---------------")
+    table = []
+    for agent in agent_order:
+        num_lowest -= 1
+        row_arr = [agent_list[agent].type]
+        row_arr.extend(list(agent_scores[agent].values()))
+        row_arr.append(sum(row_arr[1:]))
+        table.append(row_arr)
+        if num_lowest == 0:
+            break
+    print(tabulate(table, headers=ind_agent_header, tablefmt="pretty"))
+
+    print("\n\n")
     print("Best %d Agents" % num_highest)
+    print("---------------")
     table = []
     for agent in agent_order[::-1]:
         num_highest -= 1
         row_arr = [agent_list[agent].type]
         row_arr.extend(list(agent_scores[agent].values()))
+        row_arr.append(sum(row_arr[1:]))
         table.append(row_arr)
         if num_highest == 0:
             break
-    print(tabulate(table))
+    print(tabulate(table, headers=ind_agent_header, tablefmt="pretty"))
+
+    print("\n\n")
 
 def run_negotiation(agent_list, num_rounds, length_limit):
 
     agent_scores = {ele.id: get_zero_reward_dict() for ele in agent_list}
-    for round in range(num_rounds):
+    for round in tqdm(range(num_rounds)):
         ## Random pairings
         random.shuffle(agent_list)
         chunk_list = list(get_chunks(agent_list, 2))
-        print("Round %d" % round)
+        # print("Round %d" % round)
         # print("Pairings for Round %d" % round)
         # print([(ele[0].id, ele[1].id) for ele in chunk_list])
 
@@ -100,6 +127,7 @@ def run_negotiation(agent_list, num_rounds, length_limit):
             conversation, participant_info = get_random_conversation()
 
             reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_limit=length_limit)
+            # print(reward_tuple)
 
             for k in reward_tuple[0]:
                 agent_scores[agent_tuple[0].id][k] += reward_tuple[0][k]
@@ -123,7 +151,7 @@ from nest_helper import get_agents, get_random_conversation, is_terminated, get_
 
 agent_list = get_agents()
 
-print("Training")
+print("Training Rounds")
 train_scores = run_negotiation(agent_list, args.train_rounds, args.leng_limit)
 
 display_agent_scores(agent_list, train_scores, header_text="Training Scores")
@@ -132,7 +160,7 @@ display_agent_scores(agent_list, train_scores, header_text="Training Scores")
 for ele in agent_list:
     ele.set_mode('eval')
 
-print("Testing")
+print("Testing Rounds")
 test_scores = run_negotiation(agent_list, args.test_rounds, args.leng_limit)
 
 display_agent_scores(agent_list, test_scores, header_text="Testing Scores")
