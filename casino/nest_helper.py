@@ -1,49 +1,40 @@
 import random
 
 from dataloader import get_dataset
-from agents import AgentNoPlanningBayesian, AgentCasino, AgentMCTS, AgentQLearning, AgentDeepQLearningMLP, AgentNoPlanningImitation
 from agent_utils import get_proposal_score, switch_proposal_perspective
+from config_stadium import config_bayesian, config_imitation, config_mcts, config_qlearning, config_deepqlearning
+from config_stadium import config_all_dataset_test, config_all_society_train, config_all_society_test, config_all_test
 
 all_data = get_dataset('casino/casino_with_emotions_and_intents_and_proposals.json')
 random.shuffle(all_data)
 conv_ind = 0
-length_penalty = 0.5
+length_penalty = 0.2
 score_weightage = {"High" : 5, "Medium" : 4, "Low" : 3}
 
-def get_agents():
+def load_agents(stadium):
+    if stadium=="default":
+        stadium = "config_all"
 
-    num_copies = 2
-    agent_list = []
-    agent_id_counter = 0
-    for i in range(num_copies):
-        agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
-        agent_list[-1].load_model()
-        agent_list[-1].set_mode('eval')
-        agent_id_counter += 1
-
-    for i in range(num_copies):
-        agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
-        agent_list[-1].load_model()
-        agent_list[-1].set_mode('eval')
-        agent_id_counter += 1
-
-    for i in range(num_copies):
-        agent_list.append(AgentMCTS(score_weightage, length_penalty, agent_id_counter))
-        # agent_list[-1].load_model()
-        agent_list[-1].set_mode('train')
-        agent_id_counter += 1
-
-    for i in range(num_copies):
-        agent_list.append(AgentQLearning(score_weightage, length_penalty, agent_id_counter))
-        # agent_list[-1].load_model()
-        agent_list[-1].set_mode('train')
-        agent_id_counter += 1
-    #
-    for i in range(num_copies):
-        agent_list.append(AgentDeepQLearningMLP(score_weightage, length_penalty, agent_id_counter))
-        # agent_list[-1].load_model()
-        agent_list[-1].set_mode('train')
-        agent_id_counter += 1
+    if stadium=="config_bayesian":
+        agent_list = config_bayesian(score_weightage, length_penalty)
+    elif stadium=="config_imitation":
+        agent_list = config_imitation(score_weightage, length_penalty)
+    elif stadium=="config_mcts":
+        agent_list = config_mcts(score_weightage, length_penalty)
+    elif stadium=="config_qlearning":
+        agent_list = config_qlearning(score_weightage, length_penalty)
+    elif stadium=="config_deepqlearning":
+        agent_list = config_deepqlearning(score_weightage, length_penalty)
+    elif stadium=="config_all_dataset_test":
+        agent_list = config_all_dataset_test(score_weightage, length_penalty)
+    elif stadium=="config_all_society_test":
+        agent_list = config_all_society_test(score_weightage, length_penalty)
+    elif stadium=="config_all_society_train":
+        agent_list = config_all_society_train(score_weightage, length_penalty)
+    elif stadium=="config_all_test":
+        agent_list = config_all_test(score_weightage, length_penalty)
+    else:
+        raise ValueError('Stadium Identifier Not Recognised')
 
     return agent_list
 
@@ -82,3 +73,7 @@ def get_reward_dict(agent_tuple, record_conversation):
         reward_tuple[1]['Fairness Penalty'] = -1*fairness_penalty
 
     return reward_tuple
+
+def save_agents(agent_list):
+    for agent in agent_list:
+        agent.save_model()

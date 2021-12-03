@@ -9,20 +9,18 @@ import warnings
 
 warnings.filterwarnings("ignore")
 random.seed(32)
-# np.set_printoptions(precision=2)
-
-# class prettyfloat(float):
-#     def __repr__(self):
-#         return "%0.2f" % self
+np.random.seed(32)
 
 def get_chunks(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
 def extract_prefix(conversation):
+    ## Hard coded to Extract first 4 dialogues of the conversation
+    ## Can be changed to adapt to the problem statement at hand
     return conversation[:4], conversation[4:]
 
-def agent_negotiation(agent_tuple, conversation, participant_info, length_limit, act_ag=0):
+def run_negotiation(agent_tuple, conversation, participant_info, length_limit, act_ag=0):
 
     record_conversation = []
 
@@ -81,7 +79,7 @@ def display_topk_agents(agent_order, k, agent_list, agent_scores, header=""):
     table = []
     for agent in agent_order:
         k -= 1
-        row_arr = [agent_list[agent].type]
+        row_arr = [agent_list[agent].type, agent]
 
         scores = list(agent_scores[agent].values())
         scores.append(sum(scores))
@@ -97,7 +95,7 @@ def display_topk_agents(agent_order, k, agent_list, agent_scores, header=""):
 def display_agent_types(agent_order, agent_collection, header=""):
     table = []
     for agent in agent_order:
-        row_arr = [agent]
+        row_arr = [agent, None]
 
         scores = list(agent_collection[agent].values())
         scores.append(sum(scores))
@@ -112,7 +110,7 @@ def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, 
     ## Best Agents
     headers = list(agent_scores[0].keys())
     agent_order = [k for k, v in sorted(agent_scores.items(), key=lambda item: sum(item[1].values()))]
-    ind_agent_header = ["Agent Type"]
+    ind_agent_header = ["Agent Type", "Agent ID"]
     ind_agent_header.extend(list(list(agent_scores.values())[0].keys()))
     ind_agent_header.append("Final Score")
 
@@ -128,13 +126,20 @@ def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, 
 
     if collect_similar_agents:
         agent_collection = {}
+        agent_count = {}
         for agent in agent_scores:
             agent_type = agent_list[agent].type
             if agent_type in agent_collection:
                 for k in agent_scores[agent]:
                     agent_collection[agent_type][k] += agent_scores[agent][k]
+                    agent_count[agent_type] += 1
             else:
                 agent_collection[agent_type] = agent_scores[agent]
+                agent_count[agent_type] = 1
+
+        for agent in agent_collection:
+            for k in agent_collection[agent]:
+                agent_collection[agent][k] = agent_collection[agent][k]/agent_count[agent]
 
         print("\n\n")
         print("COMBINED SCORE FOR EVERY AGENT TYPE")
@@ -143,7 +148,7 @@ def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, 
 
     print("\n\n")
 
-def run_negotiation(agent_list, num_rounds, length_limit):
+def run_stadium(agent_list, num_rounds, length_limit):
 
     agent_scores = {ele.id: get_zero_reward_dict() for ele in agent_list}
     for round in tqdm(range(num_rounds)):
@@ -161,7 +166,7 @@ def run_negotiation(agent_list, num_rounds, length_limit):
             ### choose a random conversation
             conversation, participant_info = get_random_conversation()
 
-            reward_tuple = agent_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_limit=length_limit)
+            reward_tuple = run_negotiation(agent_tuple, copy.deepcopy(conversation), participant_info, length_limit=length_limit)
             # print(reward_tuple)
 
             for k in reward_tuple[0]:
@@ -174,23 +179,25 @@ def run_negotiation(agent_list, num_rounds, length_limit):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--case", default="casino", help="Name of Dataset Used")
+parser.add_argument("--stadium", default="default", help="Stadium Configuration Identifier")
 parser.add_argument("--leng_limit", type=int, default=20, help="Conversation Length Limit")
 parser.add_argument("--train_rounds", type=int, default=20, help="Number of Rounds During Training")
 parser.add_argument("--test_rounds", type=int, default=20, help="Number of Rounds During Testing")
 parser.add_argument("--vb_highest", type=int, default=5, help="Number of Best Agents Shown in Scoreboard")
 parser.add_argument("--vb_lowest", type=int, default=5, help="Number of Worst Agents Shown in Scoreboard")
 parser.add_argument("--vb_collect", action='store_true', help="Collect Scores of Each Agent Type")
+parser.add_argument("--save", action='store_true', help="Save Trained Agents")
 
 
 args = parser.parse_args()
 
 sys.path.append(args.case)
-from nest_helper import get_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
+from nest_helper import load_agents, save_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
 
-agent_list = get_agents()
+agent_list = load_agents(args.stadium)
 
 print("Training Rounds")
-train_scores = run_negotiation(agent_list, args.train_rounds, args.leng_limit)
+train_scores = run_stadium(agent_list, args.train_rounds, args.leng_limit)
 
 display_agent_scores(agent_list, train_scores, num_highest=args.vb_highest, num_lowest=args.vb_lowest,
                                                collect_similar_agents=args.vb_collect, header_text="Training Scores")
@@ -199,8 +206,11 @@ display_agent_scores(agent_list, train_scores, num_highest=args.vb_highest, num_
 for ele in agent_list:
     ele.set_mode('eval')
 
+if args.save:
+    save_agents(agent_list)
+
 print("Testing Rounds")
-test_scores = run_negotiation(agent_list, args.test_rounds, args.leng_limit)
+test_scores = run_stadium(agent_list, args.test_rounds, args.leng_limit)
 
 display_agent_scores(agent_list, test_scores, num_highest=args.vb_highest, num_lowest=args.vb_lowest,
                                                collect_similar_agents=args.vb_collect, header_text="Testing Scores")

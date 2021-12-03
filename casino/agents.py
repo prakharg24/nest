@@ -5,6 +5,7 @@ from scipy.sparse import csr_matrix
 import json
 import pickle
 import random
+import os
 import torch
 import torch.nn.functional as F
 from agent_utils import get_random_emotion, get_random_intent, choose_random_with_prob, normalize_prob, index_to_onehot
@@ -63,6 +64,9 @@ class AgentTabular():
 
     def set_mode(self, mode):
         self.mode = mode
+
+    def set_model_loc(self, loc):
+        self.model_loc = loc
 
 ### Required for training of agents which use actual dataset based calculations
 class AgentCasino(AgentTabular):
@@ -261,7 +265,12 @@ class AgentNoPlanningBayesian(AgentCasino):
             for counter, e1 in enumerate(output_dict['intent']):
                 self.proposal_intent_joint_count[priority][output_arr[ind], counter, e1] += 1
 
-    def save_model(self, outfile='casino/models/bayesian_v1.pkl'):
+    def save_model(self, outfile=None):
+        if outfile:
+            self.model_loc = outfile
+        directory = os.path.dirname(self.model_loc)
+        os.makedirs(directory, exist_ok=True)
+
         outdict = {'emotion_trans_count'                : self.emotion_trans_count,
                    'intent_trans_count'                 : self.intent_trans_count,
                    'proposal_prevproposal_joint_count'  : self.proposal_prevproposal_joint_count,
@@ -269,11 +278,13 @@ class AgentNoPlanningBayesian(AgentCasino):
                    'proposal_intent_joint_count'        : self.proposal_intent_joint_count,
                    'acceptance_count'                   : self.acceptance_count}
 
-        with open(outfile, 'wb') as fp:
+        with open(self.model_loc, 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='casino/models/bayesian_v1.pkl'):
-        with open(infile, 'rb') as fp:
+    def load_model(self, infile=None):
+        if infile:
+            self.model_loc = infile
+        with open(self.model_loc, 'rb') as fp:
             indict = pickle.load(fp)
 
         self.emotion_trans_count                = indict['emotion_trans_count']
@@ -506,11 +517,16 @@ class AgentNoPlanningImitation(AgentCasino):
 
         return outdict
 
-    def save_model(self, outfolder='casino/models/imitation/'):
+    def save_model(self, outfolder=None):
+        if outfolder:
+            self.model_loc = outfolder
+        directory = os.path.dirname(self.model_loc)
+        os.makedirs(directory, exist_ok=True)
+
         outdict = {'state_space_onehot'             : self.state_space_onehot,
                    'marker_space_onehot'            : self.marker_space_onehot}
 
-        with open(outfolder + "hyperparameters.pkl", 'wb') as fp:
+        with open(self.model_loc + "hyperparameters.pkl", 'wb') as fp:
             pickle.dump(outdict, fp)
 
         state_dicts = []
@@ -523,17 +539,19 @@ class AgentNoPlanningImitation(AgentCasino):
 
         state_dicts.append(self.marker_model.state_dict())
 
-        with open(outfolder + "state_dicts.pkl", 'wb') as fp:
+        with open(self.model_loc + "state_dicts.pkl", 'wb') as fp:
             pickle.dump(state_dicts, fp)
 
-    def load_model(self, infolder='casino/models/imitation/'):
-        with open(infolder + "hyperparameters.pkl", 'rb') as fp:
+    def load_model(self, infolder=None):
+        if infolder:
+            self.model_loc = infolder
+        with open(self.model_loc + "hyperparameters.pkl", 'rb') as fp:
             indict = pickle.load(fp)
 
         self.state_space_onehot             = indict['state_space_onehot']
         self.marker_space_onehot            = indict['marker_space_onehot']
 
-        with open(infolder + "state_dicts.pkl", 'rb') as fp:
+        with open(self.model_loc + "state_dicts.pkl", 'rb') as fp:
             indict = pickle.load(fp)
 
         self.emotion_model.load_state_dict(indict[0])
@@ -735,7 +753,12 @@ class AgentMCTS(AgentCasino):
 
         return state
 
-    def save_model(self, outfile='casino/models/mcts_v1.pkl'):
+    def save_model(self, outfile=None):
+        if outfile:
+            self.model_loc = outfile
+        directory = os.path.dirname(self.model_loc)
+        os.makedirs(directory, exist_ok=True)
+
         outdict = {'state_space_dim'                : self.state_space_dim,
                    'state_visit_counts'             : self.state_visit_counts,
                    'state_action_visit_counts'      : self.state_action_visit_counts,
@@ -746,11 +769,13 @@ class AgentMCTS(AgentCasino):
                    'exploration_term'               : self.exploration_term,
                    'marker_exploration_term'        : self.marker_exploration_term}
 
-        with open(outfile, 'wb') as fp:
+        with open(self.model_loc, 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='casino/models/mcts_v1.pkl'):
-        with open(infile, 'rb') as fp:
+    def load_model(self, infile=None):
+        if infile:
+            self.model_loc = infile
+        with open(self.model_loc, 'rb') as fp:
             indict = pickle.load(fp)
 
         self.state_space_dim                = indict['state_space_dim']
@@ -945,7 +970,12 @@ class AgentQLearning(AgentCasino):
 
         return state
 
-    def save_model(self, outfile='casino/models/qlearning_v1.pkl'):
+    def save_model(self, outfile=None):
+        if outfile:
+            self.model_loc = outfile
+        directory = os.path.dirname(self.model_loc)
+        os.makedirs(directory, exist_ok=True)
+
         outdict = {'state_space_dim'                : self.state_space_dim,
                    'utility_space'                  : self.utility_space,
                    'marker_utility_space'           : self.marker_utility_space,
@@ -956,11 +986,13 @@ class AgentQLearning(AgentCasino):
                    'gamma'                          : self.gamma,
                    'marker_gamma'                   : self.marker_gamma}
 
-        with open(outfile, 'wb') as fp:
+        with open(self.model_loc, 'wb') as fp:
             pickle.dump(outdict, fp)
 
-    def load_model(self, infile='casino/models/qlearning_v1.pkl'):
-        with open(infile, 'rb') as fp:
+    def load_model(self, infile=None):
+        if infile:
+            self.model_loc = infile
+        with open(self.model_loc, 'rb') as fp:
             indict = pickle.load(fp)
 
         self.state_space_dim                = indict['state_space_dim']
@@ -1204,8 +1236,12 @@ class AgentDeepQLearningMLP(AgentCasino):
 
         return outdict
 
-    def save_model(self, outfolder='casino/models/deepqlearning/'):
-        print("Hello")
+    def save_model(self, outfolder=None):
+        if outfolder:
+            self.model_loc = outfolder
+        directory = os.path.dirname(self.model_loc)
+        os.makedirs(directory, exist_ok=True)
+
         outdict = {'state_space_onehot'             : self.state_space_onehot,
                    'marker_space_onehot'            : self.marker_space_onehot,
                    'epsilon'                        : self.epsilon,
@@ -1213,7 +1249,7 @@ class AgentDeepQLearningMLP(AgentCasino):
                    'gamma'                          : self.gamma,
                    'marker_gamma'                   : self.marker_gamma}
 
-        with open(outfolder + "hyperparameters.pkl", 'wb') as fp:
+        with open(self.model_loc + "hyperparameters.pkl", 'wb') as fp:
             pickle.dump(outdict, fp)
 
         state_dicts = []
@@ -1227,11 +1263,13 @@ class AgentDeepQLearningMLP(AgentCasino):
 
         state_dicts.append(self.marker_model.state_dict())
 
-        with open(outfolder + "state_dicts.pkl", 'wb') as fp:
+        with open(self.model_loc + "state_dicts.pkl", 'wb') as fp:
             pickle.dump(state_dicts, fp)
 
-    def load_model(self, infolder='casino/models/deepqlearning/'):
-        with open(infolder + "hyperparameters.pkl", 'rb') as fp:
+    def load_model(self, infolder=None):
+        if infolder:
+            self.model_loc = infolder
+        with open(self.model_loc + "hyperparameters.pkl", 'rb') as fp:
             indict = pickle.load(fp)
 
         self.state_space_onehot             = indict['state_space_onehot']
@@ -1241,7 +1279,7 @@ class AgentDeepQLearningMLP(AgentCasino):
         self.gamma                          = indict['gamma']
         self.marker_gamma                   = indict['marker_gamma']
 
-        with open(infolder + "state_dicts.pkl", 'rb') as fp:
+        with open(self.model_loc + "state_dicts.pkl", 'rb') as fp:
             indict = pickle.load(fp)
 
         self.emotion_model.load_state_dict(indict[0])
