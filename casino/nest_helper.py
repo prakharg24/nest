@@ -4,6 +4,7 @@ from dataloader import get_dataset
 from agent_utils import get_proposal_score, switch_proposal_perspective
 from config_stadium import config_bayesian, config_imitation, config_mcts, config_qlearning, config_deepqlearning
 from config_stadium import config_all_dataset_test, config_all_society_train, config_all_society_test, config_all_test
+from config_stadium import config_deepqlearningsociety_test, config_qlearningsociety_test, config_mctssociety_test
 
 all_data = get_dataset('casino/casino_with_emotions_and_intents_and_proposals.json')
 random.shuffle(all_data)
@@ -27,12 +28,18 @@ def load_agents(stadium):
         agent_list = config_deepqlearning(score_weightage, length_penalty)
     elif stadium=="config_all_dataset_test":
         agent_list = config_all_dataset_test(score_weightage, length_penalty)
-    elif stadium=="config_all_society_test":
-        agent_list = config_all_society_test(score_weightage, length_penalty)
     elif stadium=="config_all_society_train":
         agent_list = config_all_society_train(score_weightage, length_penalty)
+    elif stadium=="config_all_society_test":
+        agent_list = config_all_society_test(score_weightage, length_penalty)
     elif stadium=="config_all_test":
         agent_list = config_all_test(score_weightage, length_penalty)
+    elif stadium=="config_deepqlearningsociety_test":
+        agent_list = config_deepqlearningsociety_test(score_weightage, length_penalty)
+    elif stadium=="config_qlearningsociety_test":
+        agent_list = config_qlearningsociety_test(score_weightage, length_penalty)
+    elif stadium=="config_mctssociety_test":
+        agent_list = config_mctssociety_test(score_weightage, length_penalty)
     else:
         raise ValueError('Stadium Identifier Not Recognised')
 

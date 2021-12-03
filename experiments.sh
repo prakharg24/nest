@@ -1,0 +1,12 @@
+python main.py --case casino --stadium config_bayesian --leng_limit 20 --train_rounds 5000 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect --save;
+python main.py --case casino --stadium config_imitation --leng_limit 20 --train_rounds 5000 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect --save;
+python main.py --case casino --stadium config_mcts --leng_limit 20 --train_rounds 5000 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect --save;
+python main.py --case casino --stadium config_qlearning --leng_limit 20 --train_rounds 5000 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect --save;
+python main.py --case casino --stadium config_deepqlearning --leng_limit 20 --train_rounds 5000 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect --save;
+python main.py --case casino --stadium config_all_dataset_test --leng_limit 20 --train_rounds 0 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect;
+python main.py --case casino --stadium config_all_society_train --leng_limit 20 --train_rounds 5000 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect --save;
+python main.py --case casino --stadium config_all_society_test --leng_limit 20 --train_rounds 0 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect;
+python main.py --case casino --stadium config_all_test --leng_limit 20 --train_rounds 0 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect;
+python main.py --case casino --stadium config_mctssociety_test --leng_limit 20 --train_rounds 0 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect;
+python main.py --case casino --stadium config_qlearningsociety_test --leng_limit 20 --train_rounds 0 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect;
+python main.py --case casino --stadium config_deepqlearningsociety_test --leng_limit 20 --train_rounds 0 --test_rounds 500 --vb_highest 10 --vb_lowest 10 --vb_collect;

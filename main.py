@@ -8,8 +8,8 @@ from tabulate import tabulate
 import warnings
 
 warnings.filterwarnings("ignore")
-random.seed(32)
-np.random.seed(32)
+random.seed(42)
+np.random.seed(42)
 
 def get_chunks(lst, n):
     for i in range(0, len(lst), n):
@@ -108,7 +108,6 @@ def display_agent_types(agent_order, agent_collection, header=""):
 
 def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, collect_similar_agents=True, header_text=""):
     ## Best Agents
-    headers = list(agent_scores[0].keys())
     agent_order = [k for k, v in sorted(agent_scores.items(), key=lambda item: sum(item[1].values()))]
     ind_agent_header = ["Agent Type", "Agent ID"]
     ind_agent_header.extend(list(list(agent_scores.values())[0].keys()))
@@ -151,17 +150,20 @@ def display_agent_scores(agent_list, agent_scores, num_highest=5, num_lowest=5, 
 def run_stadium(agent_list, num_rounds, length_limit):
 
     agent_scores = {ele.id: get_zero_reward_dict() for ele in agent_list}
+    agent_list_indices = list(range(len(agent_list)))
     for round in tqdm(range(num_rounds)):
         ## Random pairings
-        random.shuffle(agent_list)
-        chunk_list = list(get_chunks(agent_list, 2))
+        random.shuffle(agent_list_indices)
+        chunk_list = list(get_chunks(agent_list_indices, 2))
         # print("Round %d" % round)
         # print("Pairings for Round %d" % round)
         # print([(ele[0].id, ele[1].id) for ele in chunk_list])
 
-        for agent_tuple in chunk_list:
-            if len(agent_tuple)!=2:
+        for agent_tuple_index in chunk_list:
+            if len(agent_tuple_index)!=2:
                 continue
+
+            agent_tuple = [agent_list[agent_tuple_index[0]], agent_list[agent_tuple_index[1]]]
 
             ### choose a random conversation
             conversation, participant_info = get_random_conversation()
@@ -199,8 +201,8 @@ agent_list = load_agents(args.stadium)
 print("Training Rounds")
 train_scores = run_stadium(agent_list, args.train_rounds, args.leng_limit)
 
-display_agent_scores(agent_list, train_scores, num_highest=args.vb_highest, num_lowest=args.vb_lowest,
-                                               collect_similar_agents=args.vb_collect, header_text="Training Scores")
+# display_agent_scores(agent_list, train_scores, num_highest=args.vb_highest, num_lowest=args.vb_lowest,
+#                                                collect_similar_agents=args.vb_collect, header_text="Training Scores")
 
 ### Change all agents to eval
 for ele in agent_list:
