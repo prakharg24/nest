@@ -34,6 +34,16 @@ def config_mcts(score_weightage, length_penalty):
     agent_list = []
     agent_id_counter = 0
 
+    # agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/bayesian.pkl')
+    # agent_id_counter += 1
+
+    # agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/imitation/')
+    # agent_id_counter += 1
+
     agent_list.append(AgentCasino(score_weightage, length_penalty, agent_id_counter))
     agent_list[-1].set_mode('eval')
     agent_id_counter += 1
@@ -48,6 +58,16 @@ def config_mcts(score_weightage, length_penalty):
 def config_qlearning(score_weightage, length_penalty):
     agent_list = []
     agent_id_counter = 0
+
+    # agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/bayesian.pkl')
+    # agent_id_counter += 1
+
+    # agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/imitation/')
+    # agent_id_counter += 1
 
     agent_list.append(AgentCasino(score_weightage, length_penalty, agent_id_counter))
     agent_list[-1].set_mode('eval')
@@ -64,6 +84,16 @@ def config_deepqlearning(score_weightage, length_penalty):
     agent_list = []
     agent_id_counter = 0
 
+    # agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/bayesian.pkl')
+    # agent_id_counter += 1
+
+    # agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/imitation/')
+    # agent_id_counter += 1
+
     agent_list.append(AgentCasino(score_weightage, length_penalty, agent_id_counter))
     agent_list[-1].set_mode('eval')
     agent_id_counter += 1
@@ -79,15 +109,15 @@ def config_all_dataset_test(score_weightage, length_penalty):
     agent_list = []
     agent_id_counter = 0
 
-    agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
-    agent_list[-1].set_mode('eval')
-    agent_list[-1].load_model('casino/models/bayesian.pkl')
-    agent_id_counter += 1
+    # agent_list.append(AgentNoPlanningBayesian(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/bayesian.pkl')
+    # agent_id_counter += 1
 
-    agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
-    agent_list[-1].set_mode('eval')
-    agent_list[-1].load_model('casino/models/imitation/')
-    agent_id_counter += 1
+    # agent_list.append(AgentNoPlanningImitation(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_list[-1].load_model('casino/models/imitation/')
+    # agent_id_counter += 1
 
     agent_list.append(AgentMCTS(score_weightage, length_penalty, agent_id_counter))
     agent_list[-1].set_mode('eval')
@@ -104,9 +134,9 @@ def config_all_dataset_test(score_weightage, length_penalty):
     agent_list[-1].load_model('casino/models/deepqlearning/')
     agent_id_counter += 1
 
-    agent_list.append(AgentCasino(score_weightage, length_penalty, agent_id_counter))
-    agent_list[-1].set_mode('eval')
-    agent_id_counter += 1
+    # agent_list.append(AgentCasino(score_weightage, length_penalty, agent_id_counter))
+    # agent_list[-1].set_mode('eval')
+    # agent_id_counter += 1
 
     return agent_list
 
