@@ -8,8 +8,8 @@ from tabulate import tabulate
 import warnings
 
 warnings.filterwarnings("ignore")
-random.seed(42)
-np.random.seed(42)
+# random.seed(42)
+# np.random.seed(42)
 
 def get_chunks(lst, n):
     for i in range(0, len(lst), n):
@@ -189,12 +189,14 @@ parser.add_argument("--vb_highest", type=int, default=5, help="Number of Best Ag
 parser.add_argument("--vb_lowest", type=int, default=5, help="Number of Worst Agents Shown in Scoreboard")
 parser.add_argument("--vb_collect", action='store_true', help="Collect Scores of Each Agent Type")
 parser.add_argument("--save", action='store_true', help="Save Trained Agents")
+parser.add_argument("--load", action='store_true', help="Load Trained Agents")
+parser.add_argument("--save_selected", type=int, help="If Only One Agent Should be Saved")
 
 
 args = parser.parse_args()
 
 sys.path.append(args.case)
-from nest_helper import load_agents, save_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
+from nest_helper import load_agents, get_random_conversation, is_terminated, get_reward_dict, get_zero_reward_dict
 
 agent_list = load_agents(args.stadium)
 
@@ -209,7 +211,15 @@ for ele in agent_list:
     ele.set_mode('eval')
 
 if args.save:
-    save_agents(agent_list)
+    if args.save_selected is not None:
+        agent_list[args.save_selected].save_model()
+    else:
+        for agent in agent_list:
+            agent.save_model()
+
+if args.load:
+    for agent in agent_list:
+        agent.load_model()
 
 print("Testing Rounds")
 test_scores = run_stadium(agent_list, args.test_rounds, args.leng_limit)
